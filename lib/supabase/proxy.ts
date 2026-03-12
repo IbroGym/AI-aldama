@@ -6,6 +6,10 @@ export async function updateSession(request: NextRequest) {
     request,
   })
 
+  const pathname = request.nextUrl.pathname
+  const isAuthRoute = pathname.startsWith('/auth/')
+  const isDashboardRoute = pathname.startsWith('/dashboard')
+
   // Check if Supabase credentials are configured
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
@@ -13,7 +17,7 @@ export async function updateSession(request: NextRequest) {
   // If Supabase is not configured, allow access to public routes
   if (!supabaseUrl || !supabaseAnonKey) {
     // Block access to protected routes when Supabase is not configured
-    if (request.nextUrl.pathname.startsWith('/protected')) {
+    if (isDashboardRoute) {
       const url = request.nextUrl.clone()
       url.pathname = '/'
       return NextResponse.redirect(url)
@@ -56,14 +60,46 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser()
 
-  if (
-    // if the user is not logged in and the app path, in this case, /protected, is accessed, redirect to the login page
-    request.nextUrl.pathname.startsWith('/protected') &&
-    !user
-  ) {
-    // no user, potentially respond by redirecting the user to the login page
+  if (isDashboardRoute) {
+    // If not logged in -> отправляем на логин
+    if (!user) {
+      const url = request.nextUrl.clone()
+      url.pathname = '/auth/login'
+      url.searchParams.set('next', pathname)
+      return NextResponse.redirect(url)
+    }
+
+    // Проверяем роль пользователя в таблице profiles
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .maybeSingle()
+
+    const role = profile?.role as string | undefined
+    const isAdminOrOperator = role === 'admin' || role === 'operator'
+
+    // Настройки доступны только админам
+    if (pathname.startsWith('/dashboard/settings') && role !== 'admin') {
+      const url = request.nextUrl.clone()
+      url.pathname = '/dashboard'
+      return NextResponse.redirect(url)
+    }
+
+    // На будущее: если захотите закрыть весь dashboard от viewer,
+    // можно раскомментировать проверку ниже.
+    //
+    // if (!isAdminOrOperator) {
+    //   const url = request.nextUrl.clone()
+    //   url.pathname = '/'
+    //   return NextResponse.redirect(url)
+    // }
+  }
+
+  // If already logged in, keep auth routes out of the way
+  if (user && isAuthRoute) {
     const url = request.nextUrl.clone()
-    url.pathname = '/auth/login'
+    url.pathname = '/dashboard'
     return NextResponse.redirect(url)
   }
 
