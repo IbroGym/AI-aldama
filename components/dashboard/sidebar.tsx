@@ -25,6 +25,8 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar"
+import { Button } from "@/components/ui/button"
+import { createClient } from "@/lib/supabase/client"
 
 const mainNavItems = [
   { title: "Overview", href: "/dashboard", icon: LayoutDashboard },
@@ -46,6 +48,12 @@ const systemItems = [
 
 export function DashboardSidebar() {
   const pathname = usePathname()
+
+  async function signOut() {
+    const supabase = createClient()
+    await supabase?.auth.signOut()
+    window.location.href = "/auth/login"
+  }
 
   return (
     <Sidebar>
@@ -127,9 +135,14 @@ export function DashboardSidebar() {
       </SidebarContent>
 
       <SidebarFooter className="border-t border-sidebar-border p-4">
-        <div className="flex items-center gap-2">
-          <div className="h-2 w-2 rounded-full bg-green-500" />
-          <span className="text-xs text-sidebar-foreground/60">System Online</span>
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <div className="h-2 w-2 rounded-full bg-green-500" />
+            <span className="text-xs text-sidebar-foreground/60">System Online</span>
+          </div>
+          <Button variant="secondary" className="w-full" onClick={signOut}>
+            Sign out
+          </Button>
         </div>
       </SidebarFooter>
     </Sidebar>
