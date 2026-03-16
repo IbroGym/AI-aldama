@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server"
 import { KioskDisplay } from "@/components/kiosk/kiosk-display"
+import { KioskShell } from "@/components/kiosk/kiosk-shell"
 
 export default async function KioskPage() {
   const supabase = await createClient()
@@ -21,10 +22,12 @@ export default async function KioskPage() {
     .order("severity", { ascending: false })
 
   return (
-    <KioskDisplay 
-      stops={stops || []} 
-      defaultStopId={defaultStop?.id}
-      alerts={alerts || []}
-    />
+    <KioskShell>
+      <KioskDisplay 
+        stops={stops || []} 
+        defaultStopId={defaultStop?.id}
+        alerts={alerts || []}
+      />
+    </KioskShell>
   )
 }

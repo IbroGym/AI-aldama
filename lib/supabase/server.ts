@@ -11,7 +11,12 @@ export async function createClient() {
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
   if (!supabaseUrl || !supabaseAnonKey) {
-    return null
+    throw new Error(
+      [
+        'Supabase env vars are missing.',
+        'Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in .env.local, then restart `npm run dev`.',
+      ].join(' '),
+    )
   }
 
   const cookieStore = await cookies()
