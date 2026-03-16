@@ -183,14 +183,14 @@ export function KioskVoiceAssistant({ stopId, stopName }: KioskVoiceAssistantPro
   ]
 
   return (
-    <div className="flex flex-col rounded-2xl bg-[#0d1424] p-4">
+    <div className="flex flex-col rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200">
       <div className="mb-4 flex items-center justify-between">
-        <h3 className="flex items-center gap-2 font-semibold text-white">
-          <Mic className="h-5 w-5 text-blue-400" />
+        <h3 className="flex items-center gap-2 font-semibold text-slate-900">
+          <Mic className="h-5 w-5 text-blue-500" />
           Voice Assistant
         </h3>
         {isSpeaking && (
-          <div className="flex items-center gap-1 text-xs text-blue-400">
+          <div className="flex items-center gap-1 text-xs text-blue-600">
             <Volume2 className="h-4 w-4 animate-pulse" />
             Speaking...
           </div>
@@ -198,10 +198,10 @@ export function KioskVoiceAssistant({ stopId, stopName }: KioskVoiceAssistantPro
       </div>
 
       {/* Messages */}
-      <div className="mb-4 flex h-48 flex-col gap-3 overflow-y-auto rounded-xl bg-black/30 p-3">
+      <div className="mb-4 flex h-48 flex-col gap-3 overflow-y-auto rounded-xl bg-slate-50 p-3">
         {messages.length === 0 ? (
-          <div className="flex h-full flex-col items-center justify-center text-center text-sm text-white/50">
-            <Mic className="mb-2 h-8 w-8 opacity-50" />
+          <div className="flex h-full flex-col items-center justify-center text-center text-sm text-slate-400">
+            <Mic className="mb-2 h-8 w-8 text-slate-300" />
             <p>Ask me about bus arrivals, routes, or schedules</p>
           </div>
         ) : (
@@ -211,7 +211,7 @@ export function KioskVoiceAssistant({ stopId, stopName }: KioskVoiceAssistantPro
               className={`max-w-[85%] rounded-xl px-3 py-2 text-sm ${
                 msg.role === "user"
                   ? "ml-auto bg-blue-600 text-white"
-                  : "bg-white/10 text-white"
+                  : "bg-slate-100 text-slate-900"
               }`}
             >
               {msg.content}
@@ -219,7 +219,7 @@ export function KioskVoiceAssistant({ stopId, stopName }: KioskVoiceAssistantPro
           ))
         )}
         {isLoading && (
-          <div className="flex items-center gap-2 text-sm text-white/50">
+          <div className="flex items-center gap-2 text-sm text-slate-500">
             <Loader2 className="h-4 w-4 animate-spin" />
             Thinking...
           </div>
@@ -234,7 +234,7 @@ export function KioskVoiceAssistant({ stopId, stopName }: KioskVoiceAssistantPro
             <button
               key={q}
               onClick={() => handleSubmit(q)}
-              className="rounded-full bg-white/5 px-3 py-1.5 text-xs text-white/70 transition-colors hover:bg-white/10 hover:text-white"
+              className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-700 transition-colors hover:bg-blue-100 hover:text-blue-800"
             >
               {q}
             </button>
@@ -249,7 +249,7 @@ export function KioskVoiceAssistant({ stopId, stopName }: KioskVoiceAssistantPro
             variant="outline"
             size="icon"
             onClick={toggleListening}
-            className={`shrink-0 border-white/20 bg-transparent text-white hover:bg-white/10 hover:text-white ${
+            className={`shrink-0 border-slate-300 bg-white text-slate-700 hover:bg-slate-50 hover:text-slate-900 ${
               isListening ? "animate-pulse bg-red-600/20 ring-2 ring-red-500" : ""
             }`}
           >
@@ -266,7 +266,7 @@ export function KioskVoiceAssistant({ stopId, stopName }: KioskVoiceAssistantPro
             }
           }}
           placeholder="Type or speak your question..."
-          className="min-h-10 resize-none border-white/20 bg-white/5 text-white placeholder:text-white/40"
+          className="min-h-10 resize-none border-slate-300 bg-white text-slate-900 placeholder:text-slate-400"
           rows={1}
         />
         <Button

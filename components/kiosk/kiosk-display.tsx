@@ -8,6 +8,7 @@ import { KioskArrivals } from "./kiosk-arrivals"
 import { KioskAlerts } from "./kiosk-alerts"
 import { KioskVoiceAssistant } from "./kiosk-voice-assistant"
 import { KioskStopSelector } from "./kiosk-stop-selector"
+import { KioskMap } from "./kiosk-map"
 
 interface KioskDisplayProps {
   stops: BusStop[]
@@ -207,33 +208,53 @@ export function KioskDisplay({ stops, defaultStopId, alerts }: KioskDisplayProps
   }, [selectedStopId, supabase, fetchEtas])
 
   return (
-    <div className="flex min-h-screen flex-col bg-[#0a0f1a] text-white">
+    <div className="flex min-h-screen flex-col bg-[#f4f7fb] text-slate-900">
       <KioskHeader 
         stopName={selectedStop?.name || "Unknown Stop"} 
         currentTime={currentTime}
         stopCode={selectedStop?.stop_code}
       />
 
-      <main className="flex flex-1 flex-col gap-4 p-4 lg:flex-row lg:gap-6 lg:p-6">
-        <div className="flex flex-1 flex-col gap-4">
-          <KioskArrivals etas={etas} loading={loading} currentTime={currentTime} />
-          <KioskAlerts alerts={alerts} />
-        </div>
+      <main className="flex flex-1 flex-col gap-4 p-4 lg:p-6">
+        <div className="flex flex-1 flex-col gap-4 lg:flex-row lg:gap-6">
+          {/* Secondary info column: arrivals + alerts */}
+          <div className="hidden w-full min-w-[320px] flex-1 flex-col gap-4 lg:flex lg:flex-[1.3]">
+            <KioskArrivals etas={etas} loading={loading} currentTime={currentTime} />
+            <KioskAlerts alerts={alerts} />
+          </div>
 
-        <div className="flex flex-col gap-4 lg:w-96">
-          <KioskVoiceAssistant stopId={selectedStopId} stopName={selectedStop?.name} />
-          <KioskStopSelector 
-            stops={stops} 
-            selectedStopId={selectedStopId} 
-            onSelect={setSelectedStopId} 
-          />
+          {/* Primary focus: center column – map on top, assistant beneath */}
+          <div className="flex w-full flex-1 flex-col gap-4 lg:flex-[2.2]">
+            <KioskMap stop={selectedStop} />
+
+            <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-[0_18px_60px_rgba(15,23,42,0.12)] lg:p-6">
+              <KioskVoiceAssistant stopId={selectedStopId} stopName={selectedStop?.name} />
+            </div>
+
+            {/* Compact arrivals for small screens only */}
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 lg:hidden">
+              <KioskArrivals etas={etas} loading={loading} currentTime={currentTime} />
+            </div>
+          </div>
+
+          {/* Right sidebar: stop selector + alerts */}
+          <div className="flex w-full flex-col gap-4 lg:w-96">
+            <div className="rounded-2xl border border-slate-200 bg-white p-4">
+              <KioskStopSelector 
+                stops={stops} 
+                selectedStopId={selectedStopId} 
+                onSelect={setSelectedStopId} 
+              />
+            </div>
+            <KioskAlerts alerts={alerts} />
+          </div>
         </div>
       </main>
 
-      <footer className="border-t border-white/10 bg-[#0d1424] px-4 py-3">
-        <div className="flex items-center justify-between text-xs text-white/50">
+      <footer className="border-t border-slate-200 bg-white/80 px-4 py-3 backdrop-blur">
+        <div className="flex items-center justify-between text-xs text-slate-500">
           <span>Smart Bus Stop System</span>
-          <span>Press the button or speak to ask a question</span>
+          <span>Ask anything about your trip</span>
         </div>
       </footer>
     </div>
