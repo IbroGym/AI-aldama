@@ -26,31 +26,31 @@ export function KioskStopSelector({ stops, selectedStopId, onSelect }: KioskStop
   }, {} as Record<string, BusStop[]>)
 
   return (
-    <div className="rounded-2xl bg-[#0d1424] p-4">
+    <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200">
       <div className="mb-3 flex items-center gap-2">
-        <MapPin className="h-5 w-5 text-blue-400" />
-        <h3 className="font-semibold text-white">Select Stop</h3>
+        <MapPin className="h-5 w-5 text-blue-500" />
+        <h3 className="font-semibold text-slate-900">Select Stop</h3>
       </div>
 
       <Select value={selectedStopId} onValueChange={onSelect}>
-        <SelectTrigger className="w-full border-white/20 bg-white/5 text-white hover:bg-white/10 [&>svg]:text-white/60">
+        <SelectTrigger className="w-full border-slate-300 bg-white text-slate-900 hover:bg-slate-50 [&>svg]:text-slate-400">
           <SelectValue placeholder="Choose a stop" />
         </SelectTrigger>
-        <SelectContent className="max-h-64 border-white/20 bg-[#0d1424] text-white">
+        <SelectContent className="max-h-64 border-slate-200 bg-white text-slate-900">
           {Object.entries(stopsByZone).map(([zone, zoneStops]) => (
             <div key={zone}>
-              <div className="px-2 py-1.5 text-xs font-semibold text-white/50">
+              <div className="px-2 py-1.5 text-xs font-semibold text-slate-400">
                 {zone}
               </div>
               {zoneStops.map((stop) => (
                 <SelectItem
                   key={stop.id}
                   value={stop.id}
-                  className="cursor-pointer text-white focus:bg-white/10 focus:text-white"
+                  className="cursor-pointer text-slate-900 focus:bg-slate-100 focus:text-slate-900"
                 >
                   <div className="flex items-center gap-2">
                     <span>{stop.name}</span>
-                    <span className="text-xs text-white/40">#{stop.stop_code}</span>
+                    <span className="text-xs text-slate-400">#{stop.stop_code}</span>
                   </div>
                 </SelectItem>
               ))}
@@ -60,14 +60,14 @@ export function KioskStopSelector({ stops, selectedStopId, onSelect }: KioskStop
       </Select>
 
       {selectedStopId && (
-        <div className="mt-3 space-y-1 text-xs text-white/50">
+        <div className="mt-3 space-y-1 text-xs text-slate-500">
           {stops.find(s => s.id === selectedStopId)?.address && (
             <p>{stops.find(s => s.id === selectedStopId)?.address}</p>
           )}
           <div className="flex items-center gap-3">
             {stops.find(s => s.id === selectedStopId)?.has_shelter && (
               <span className="flex items-center gap-1">
-                <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
                 Shelter
               </span>
             )}

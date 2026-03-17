@@ -30,14 +30,14 @@ export function KioskArrivals({ etas, loading, currentTime }: KioskArrivalsProps
 
   if (loading) {
     return (
-      <div className="flex-1 rounded-2xl bg-[#0d1424] p-6">
+      <div className="flex-1 rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
         <div className="mb-6 flex items-center gap-2">
-          <Clock className="h-5 w-5 text-blue-400" />
-          <h2 className="text-xl font-semibold text-white">Next Arrivals</h2>
+          <Clock className="h-5 w-5 text-blue-500" />
+          <h2 className="text-xl font-semibold text-slate-900">Next Arrivals</h2>
         </div>
         <div className="space-y-4">
           {Array.from({ length: 4 }).map((_, i) => (
-            <Skeleton key={i} className="h-20 bg-white/5" />
+            <Skeleton key={i} className="h-20 bg-slate-100" />
           ))}
         </div>
       </div>
@@ -45,16 +45,16 @@ export function KioskArrivals({ etas, loading, currentTime }: KioskArrivalsProps
   }
 
   return (
-    <div className="flex-1 rounded-2xl bg-[#0d1424] p-6">
+    <div className="flex-1 rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
       <div className="mb-6 flex items-center gap-2">
-        <Clock className="h-5 w-5 text-blue-400" />
-        <h2 className="text-xl font-semibold text-white">Next Arrivals</h2>
+        <Clock className="h-5 w-5 text-blue-500" />
+        <h2 className="text-xl font-semibold text-slate-900">Next Arrivals</h2>
       </div>
 
       {etas.length === 0 ? (
-        <div className="flex h-48 items-center justify-center text-white/50">
+        <div className="flex h-48 items-center justify-center text-slate-400">
           <div className="text-center">
-            <Bus className="mx-auto mb-2 h-12 w-12 opacity-50" />
+            <Bus className="mx-auto mb-2 h-12 w-12 text-slate-300" />
             <p>No upcoming arrivals at this stop</p>
           </div>
         </div>
@@ -66,38 +66,40 @@ export function KioskArrivals({ etas, loading, currentTime }: KioskArrivalsProps
             const routeColor = eta.route?.color || "#3B82F6"
 
             return (
-              <div
-                key={eta.id}
-                className={`flex items-center justify-between rounded-xl p-4 transition-colors ${
-                  isImminent 
-                    ? "animate-pulse bg-green-600/20 ring-1 ring-green-500/50" 
-                    : "bg-white/5"
-                } ${index === 0 ? "ring-2 ring-blue-500/50" : ""}`}
+            <div
+              key={eta.id}
+              className={`flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50 p-4 transition-colors ${
+                isImminent 
+                  ? "animate-pulse border-green-400/70 bg-green-50 ring-1 ring-green-400/60" 
+                  : index === 0
+                    ? "border-blue-400/70 bg-blue-50 ring-1 ring-blue-400/60"
+                    : ""
+              }`}
               >
                 <div className="flex items-center gap-4">
                   <div 
-                    className="flex h-14 w-14 items-center justify-center rounded-xl text-xl font-bold text-white"
+                    className="flex h-14 w-14 items-center justify-center rounded-xl text-xl font-bold text-white shadow-sm"
                     style={{ backgroundColor: routeColor }}
                   >
                     {eta.route?.route_number || "?"}
                   </div>
                   <div>
-                    <div className="text-lg font-semibold text-white">
+                    <div className="text-lg font-semibold text-slate-900">
                       {eta.route?.route_name || "Unknown Route"}
                     </div>
-                    <div className="text-sm text-white/60">
+                    <div className="text-sm text-slate-500">
                       Bus {eta.bus?.bus_number || "Unknown"}
                     </div>
                   </div>
                 </div>
 
                 <div className="text-right">
-                  <div className={`text-3xl font-bold tabular-nums ${
-                    isImminent ? "text-green-400" : "text-white"
+                  <div className={`whitespace-nowrap text-lg font-semibold tabular-nums ${
+                    isImminent ? "text-green-600" : "text-slate-900"
                   }`}>
                     {formatArrival(eta.predicted_arrival)}
                   </div>
-                  <div className="flex items-center justify-end gap-1 text-xs text-white/50">
+                  <div className="flex items-center justify-end gap-1 text-xs text-slate-500">
                     <div 
                       className={`h-1.5 w-1.5 rounded-full ${
                         eta.confidence >= 0.9 ? "bg-green-500" :
