@@ -9,6 +9,8 @@ import { KioskAlerts } from "./kiosk-alerts"
 import { KioskVoiceAssistant } from "./kiosk-voice-assistant"
 import { KioskStopSelector } from "./kiosk-stop-selector"
 import { KioskMap } from "./kiosk-map"
+import { KioskWeather } from "./kiosk-weather"
+import { KioskEmergencyActions } from "./kiosk-emergency-actions"
 
 interface KioskDisplayProps {
   stops: BusStop[]
@@ -239,6 +241,11 @@ export function KioskDisplay({ stops, defaultStopId, alerts }: KioskDisplayProps
 
           {/* Right sidebar: stop selector + alerts */}
           <div className="flex w-full flex-col gap-4 lg:w-96">
+            <KioskWeather
+              latitude={selectedStop?.latitude}
+              longitude={selectedStop?.longitude}
+              locationLabel={selectedStop?.name || undefined}
+            />
             <div className="rounded-2xl border border-slate-200 bg-white p-4">
               <KioskStopSelector 
                 stops={stops} 
@@ -246,7 +253,7 @@ export function KioskDisplay({ stops, defaultStopId, alerts }: KioskDisplayProps
                 onSelect={setSelectedStopId} 
               />
             </div>
-            <KioskAlerts alerts={alerts} />
+            <KioskEmergencyActions stopName={selectedStop?.name} />
           </div>
         </div>
       </main>
