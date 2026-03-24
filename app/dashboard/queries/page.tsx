@@ -4,8 +4,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { MessageSquare, CheckCircle, XCircle, TrendingUp } from "lucide-react"
+import { getServerI18n } from "@/lib/i18n/server"
 
 export default async function QueriesPage() {
+  const { t } = await getServerI18n()
   const supabase = await createClient()
 
   const { data: queries } = await supabase
@@ -42,7 +44,7 @@ export default async function QueriesPage() {
   }
 
   const formatIntent = (intent: string | null) => {
-    if (!intent) return "Unknown"
+    if (!intent) return t("common.unknown")
     return intent.split("_").map(word => 
       word.charAt(0).toUpperCase() + word.slice(1)
     ).join(" ")
@@ -50,14 +52,14 @@ export default async function QueriesPage() {
 
   return (
     <div className="flex flex-col">
-      <DashboardHeader title="AI Queries" description="Monitor passenger questions and AI responses" />
+      <DashboardHeader title={t("dashboard.queriesTitle")} description={t("dashboard.queriesDescription")} />
 
       <main className="flex-1 space-y-6 p-6">
         {/* Stats */}
         <div className="grid gap-4 md:grid-cols-4">
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Total Queries</CardTitle>
+              <CardTitle className="text-sm font-medium text-muted-foreground">{t("dashboard.aiQueries")}</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-foreground">{totalQueries}</div>
@@ -65,7 +67,7 @@ export default async function QueriesPage() {
           </Card>
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Success Rate</CardTitle>
+              <CardTitle className="text-sm font-medium text-muted-foreground">{t("dashboard.successRate")}</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-foreground">
@@ -75,7 +77,7 @@ export default async function QueriesPage() {
           </Card>
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Avg Response Time</CardTitle>
+              <CardTitle className="text-sm font-medium text-muted-foreground">{t("dashboard.avgResponseTime")}</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-foreground">{Math.round(avgResponseTime)}ms</div>
@@ -83,7 +85,7 @@ export default async function QueriesPage() {
           </Card>
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Top Intent</CardTitle>
+              <CardTitle className="text-sm font-medium text-muted-foreground">{t("dashboard.topIntent")}</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-foreground">
@@ -98,7 +100,7 @@ export default async function QueriesPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
               <TrendingUp className="h-4 w-4" />
-              Query Intents
+              {t("dashboard.queryIntents")}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -120,19 +122,19 @@ export default async function QueriesPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
               <MessageSquare className="h-4 w-4" />
-              Recent Queries
+              {t("dashboard.recentAiQueries")}
             </CardTitle>
           </CardHeader>
           <CardContent>
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Question</TableHead>
-                  <TableHead>Intent</TableHead>
-                  <TableHead>Stop</TableHead>
-                  <TableHead>Response Time</TableHead>
-                  <TableHead>Time</TableHead>
+                  <TableHead>{t("dashboard.status")}</TableHead>
+                  <TableHead>{t("dashboard.question")}</TableHead>
+                  <TableHead>{t("dashboard.intent")}</TableHead>
+                  <TableHead>{t("dashboard.stop")}</TableHead>
+                  <TableHead>{t("dashboard.responseTime")}</TableHead>
+                  <TableHead>{t("dashboard.time")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>

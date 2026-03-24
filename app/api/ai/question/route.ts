@@ -1,10 +1,12 @@
 import { generateText, tool } from "ai"
 import { z } from "zod"
 import { createClient } from "@/lib/supabase/server"
+import { isLocale, type Locale } from "@/lib/i18n/config"
 
 export async function POST(req: Request) {
   const startTime = Date.now()
-  const { question, stopId, stopName } = await req.json()
+  const { question, stopId, stopName, locale } = await req.json()
+  const responseLocale: Locale = isLocale(locale) ? locale : "kk"
 
   if (!question) {
     return Response.json({ error: "Question is required" }, { status: 400 })
@@ -45,7 +47,15 @@ export async function POST(req: Request) {
     ),
   }))
 
+  const languageInstruction =
+    responseLocale === "ru"
+      ? "Respond in Russian."
+      : responseLocale === "en"
+        ? "Respond in English."
+        : "Respond in Kazakh."
+
   const systemPrompt = `You are a helpful transit assistant at a bus stop kiosk. You help passengers with information about bus arrivals, routes, and schedules.
+${languageInstruction}
 
 Current Context:
 - Current Stop: ${stopName || currentStop?.name || "Unknown"}
@@ -82,15 +92,41 @@ Instructions:
 
   // Rule-based fallback function for when AI is unavailable
   const generateFallbackAnswer = (): string => {
+    const tx = {
+      nextBus:
+        responseLocale === "ru"
+          ? "Следующий автобус"
+          : responseLocale === "en"
+            ? "The next bus is"
+            : "Келесі автобус",
+      arrivingIn:
+        responseLocale === "ru"
+          ? "прибудет через"
+          : responseLocale === "en"
+            ? "arriving in"
+            : "келеді",
+      noArrivals:
+        responseLocale === "ru"
+          ? "Сейчас на этой остановке нет ближайших прибытий."
+          : responseLocale === "en"
+            ? "There are currently no upcoming arrivals at this stop."
+            : "Қазір бұл аялдамада жақын келулер жоқ.",
+      generic:
+        responseLocale === "ru"
+          ? "Я помогу с прибытиями автобусов и маршрутами."
+          : responseLocale === "en"
+            ? "I'm here to help with bus arrival times and route information."
+            : "Автобус келуі мен маршрут туралы көмектесемін.",
+    }
     const questionLower = question.toLowerCase()
     
     // Next arrival queries
     if (questionLower.includes("next") || questionLower.includes("when")) {
       if (upcomingArrivals?.length) {
         const next = upcomingArrivals[0]
-        return `The next bus is Route ${next.route} (${next.routeName}), arriving in ${next.minutesAway} minutes.`
+        return `${tx.nextBus} ${next.route} (${next.routeName}), ${tx.arrivingIn} ${next.minutesAway} min.`
       }
-      return "There are currently no upcoming arrivals at this stop."
+      return tx.noArrivals
     }
     
     // Route information queries
@@ -127,11 +163,11 @@ Instructions:
     }
     
     // Default response
-    return `I'm here to help with bus arrival times and route information. The next bus at ${stopName || "this stop"} is ${
+    return `${tx.generic} ${stopName || "this stop"}: ${
       upcomingArrivals?.length
-        ? `Route ${upcomingArrivals[0].route} in ${upcomingArrivals[0].minutesAway} minutes`
-        : "not currently scheduled"
-    }.`
+        ? `${upcomingArrivals[0].route} ${tx.arrivingIn} ${upcomingArrivals[0].minutesAway} min`
+        : tx.noArrivals
+    }`
   }
 
   try {

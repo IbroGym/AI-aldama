@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { Cloud, CloudRain, CloudSnow, Sun, Wind } from "lucide-react"
+import { useI18n } from "@/components/i18n-provider"
 
 type WeatherStatus = "idle" | "loading" | "ready" | "error"
 
@@ -51,16 +52,17 @@ function formatTemp(v?: number) {
 }
 
 export function KioskWeather({ latitude, longitude, locationLabel }: KioskWeatherProps) {
+  const { t } = useI18n()
   const coords = useMemo(() => {
     if (typeof latitude === "number" && typeof longitude === "number") {
       return {
         lat: clampCoord(latitude, -90, 90),
         lon: clampCoord(longitude, -180, 180),
-        label: locationLabel || "This stop",
+        label: locationLabel || t("kiosk.thisStop"),
       }
     }
     return ASTANA
-  }, [latitude, longitude, locationLabel])
+  }, [latitude, longitude, locationLabel, t])
 
   const [status, setStatus] = useState<WeatherStatus>("idle")
   const [data, setData] = useState<OpenMeteoResponse | null>(null)
@@ -109,7 +111,7 @@ export function KioskWeather({ latitude, longitude, locationLabel }: KioskWeathe
   return (
     <div className="flex flex-col rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200">
       <div className="mb-3 flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-slate-900">Weather</h3>
+        <h3 className="text-sm font-semibold text-slate-900">{t("kiosk.weather")}</h3>
         <span className="text-xs text-slate-500">{coords.label}</span>
       </div>
 
@@ -123,22 +125,22 @@ export function KioskWeather({ latitude, longitude, locationLabel }: KioskWeathe
               {status === "ready" ? formatTemp(data?.current?.temperature_2m) : "—"}
             </div>
             <div className="text-xs text-slate-500">
-              {status === "loading" ? "Loading…" : status === "error" ? "Unavailable" : "Now"}
+              {status === "loading" ? t("common.loading") : status === "error" ? t("kiosk.unavailable") : t("common.now")}
             </div>
           </div>
         </div>
 
         <div className="grid grid-cols-3 gap-2">
           <div className="rounded-xl bg-slate-50 p-2 ring-1 ring-slate-200">
-            <div className="text-[10px] font-medium uppercase tracking-wide text-slate-500">Max</div>
+            <div className="text-[10px] font-medium uppercase tracking-wide text-slate-500">{t("kiosk.max")}</div>
             <div className="mt-1 text-sm font-semibold text-slate-900">{formatTemp(max)}</div>
           </div>
           <div className="rounded-xl bg-slate-50 p-2 ring-1 ring-slate-200">
-            <div className="text-[10px] font-medium uppercase tracking-wide text-slate-500">Min</div>
+            <div className="text-[10px] font-medium uppercase tracking-wide text-slate-500">{t("kiosk.min")}</div>
             <div className="mt-1 text-sm font-semibold text-slate-900">{formatTemp(min)}</div>
           </div>
           <div className="rounded-xl bg-slate-50 p-2 ring-1 ring-slate-200">
-            <div className="text-[10px] font-medium uppercase tracking-wide text-slate-500">Rain</div>
+            <div className="text-[10px] font-medium uppercase tracking-wide text-slate-500">{t("kiosk.rain")}</div>
             <div className="mt-1 text-sm font-semibold text-slate-900">{pop == null ? "—" : `${Math.round(pop)}%`}</div>
           </div>
         </div>
@@ -152,7 +154,7 @@ export function KioskWeather({ latitude, longitude, locationLabel }: KioskWeathe
                 : "—"}
             </span>
           </div>
-          <span>{lastUpdatedAt ? `Updated ${new Date(lastUpdatedAt).toLocaleTimeString()}` : ""}</span>
+          <span>{lastUpdatedAt ? `${t("kiosk.updated")} ${new Date(lastUpdatedAt).toLocaleTimeString()}` : ""}</span>
         </div>
       </div>
     </div>

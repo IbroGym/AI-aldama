@@ -3,8 +3,10 @@ import { DashboardHeader } from "@/components/dashboard/header"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Bell, AlertTriangle, Info, Clock, Wrench, CheckCircle } from "lucide-react"
+import { getServerI18n } from "@/lib/i18n/server"
 
 export default async function AlertsPage() {
+  const { t } = await getServerI18n()
   const supabase = await createClient()
 
   const { data: alerts } = await supabase
@@ -44,14 +46,14 @@ export default async function AlertsPage() {
 
   return (
     <div className="flex flex-col">
-      <DashboardHeader title="Service Alerts" description="Manage service notifications and alerts" />
+      <DashboardHeader title={t("dashboard.alertsTitle")} description={t("dashboard.alertsDescription")} />
 
       <main className="flex-1 space-y-6 p-6">
         {/* Stats */}
         <div className="grid gap-4 md:grid-cols-4">
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Active Alerts</CardTitle>
+              <CardTitle className="text-sm font-medium text-muted-foreground">{t("dashboard.activeAlerts")}</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-foreground">{activeAlerts.length}</div>
@@ -59,7 +61,7 @@ export default async function AlertsPage() {
           </Card>
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Critical</CardTitle>
+              <CardTitle className="text-sm font-medium text-muted-foreground">{t("dashboard.critical")}</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-destructive">
@@ -69,7 +71,7 @@ export default async function AlertsPage() {
           </Card>
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Delays</CardTitle>
+              <CardTitle className="text-sm font-medium text-muted-foreground">{t("dashboard.delays")}</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-foreground">
@@ -79,7 +81,7 @@ export default async function AlertsPage() {
           </Card>
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Maintenance</CardTitle>
+              <CardTitle className="text-sm font-medium text-muted-foreground">{t("dashboard.maintenance")}</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-foreground">
@@ -94,14 +96,14 @@ export default async function AlertsPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
               <Bell className="h-4 w-4" />
-              Active Alerts
+              {t("dashboard.activeAlerts")}
             </CardTitle>
           </CardHeader>
           <CardContent>
             {activeAlerts.length === 0 ? (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <CheckCircle className="h-4 w-4 text-green-500" />
-                No active alerts - All services running normally
+                {t("dashboard.noActiveAlerts")}
               </div>
             ) : (
               <div className="space-y-4">
@@ -119,11 +121,11 @@ export default async function AlertsPage() {
                           <h4 className="font-semibold text-foreground">{alert.title}</h4>
                           <p className="mt-1 text-sm text-muted-foreground">{alert.message}</p>
                           <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                            <span>Started: {formatDate(alert.starts_at)}</span>
+                            <span>{t("dashboard.started")}: {formatDate(alert.starts_at)}</span>
                             {alert.ends_at && (
                               <>
                                 <span>•</span>
-                                <span>Ends: {formatDate(alert.ends_at)}</span>
+                                <span>{t("dashboard.ends")}: {formatDate(alert.ends_at)}</span>
                               </>
                             )}
                           </div>
@@ -150,7 +152,7 @@ export default async function AlertsPage() {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base text-muted-foreground">
-                Past Alerts
+                {t("dashboard.pastAlerts")}
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -171,7 +173,7 @@ export default async function AlertsPage() {
                         </div>
                       </div>
                     </div>
-                    <Badge variant="secondary">Resolved</Badge>
+                    <Badge variant="secondary">{t("dashboard.resolved")}</Badge>
                   </div>
                 ))}
               </div>

@@ -1,10 +1,16 @@
+"use client"
+
 import React from "react"
 import Link from "next/link"
 import { Bus, LayoutDashboard, Monitor, Mic, MapPin, Activity } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { useI18n } from "@/components/i18n-provider"
+import { LanguageSwitcher } from "@/components/language-switcher"
 
 export default function HomePage() {
+  const { t } = useI18n()
+
   return (
     <div className="min-h-screen bg-background">
       <header className="border-b border-border bg-card">
@@ -15,15 +21,16 @@ export default function HomePage() {
             </div>
             <div>
               <h1 className="text-lg font-semibold text-foreground">Smart Bus Stop</h1>
-              <p className="text-sm text-muted-foreground">Transit Management System</p>
+              <p className="text-sm text-muted-foreground">{t("common.transitSystem")}</p>
             </div>
           </div>
           <nav className="flex items-center gap-3">
+            <LanguageSwitcher />
             <Button variant="ghost" asChild>
-              <Link href="/dashboard">Dashboard</Link>
+              <Link href="/dashboard">{t("home.dashboard")}</Link>
             </Button>
             <Button asChild>
-              <Link href="/kiosk">Kiosk Demo</Link>
+              <Link href="/kiosk">{t("home.kioskDemo")}</Link>
             </Button>
           </nav>
         </div>
@@ -32,44 +39,43 @@ export default function HomePage() {
       <main className="mx-auto max-w-7xl px-6 py-12">
         <section className="mb-16 text-center">
           <h2 className="mb-4 text-balance text-4xl font-bold tracking-tight text-foreground">
-            Intelligent Transit Infrastructure
+            {t("home.heroTitle")}
           </h2>
           <p className="mx-auto max-w-2xl text-pretty text-lg text-muted-foreground">
-            Real-time bus tracking, AI-powered passenger assistance, and comprehensive 
-            transit management for modern cities.
+            {t("home.heroSubtitle")}
           </p>
         </section>
 
         <section className="mb-16 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
           <FeatureCard
             icon={<MapPin className="h-6 w-6" />}
-            title="Real-Time Tracking"
-            description="GPS-enabled buses provide live location data with accurate ETA predictions powered by machine learning."
+            title={t("home.feature.realtime.title")}
+            description={t("home.feature.realtime.desc")}
           />
           <FeatureCard
             icon={<Mic className="h-6 w-6" />}
-            title="Voice Assistant"
-            description="Natural language processing enables passengers to ask questions about routes, schedules, and arrivals."
+            title={t("home.feature.voice.title")}
+            description={t("home.feature.voice.desc")}
           />
           <FeatureCard
             icon={<Monitor className="h-6 w-6" />}
-            title="Digital Displays"
-            description="Bus stops equipped with screens showing real-time arrivals, alerts, and transit information."
+            title={t("home.feature.display.title")}
+            description={t("home.feature.display.desc")}
           />
           <FeatureCard
             icon={<Activity className="h-6 w-6" />}
-            title="Predictive ETAs"
-            description="AI models analyze traffic patterns, historical data, and current conditions for accurate arrival times."
+            title={t("home.feature.eta.title")}
+            description={t("home.feature.eta.desc")}
           />
           <FeatureCard
             icon={<LayoutDashboard className="h-6 w-6" />}
-            title="Operations Dashboard"
-            description="Centralized monitoring of fleet status, system health, passenger queries, and service alerts."
+            title={t("home.feature.ops.title")}
+            description={t("home.feature.ops.desc")}
           />
           <FeatureCard
             icon={<Bus className="h-6 w-6" />}
-            title="Fleet Management"
-            description="Track vehicle positions, monitor routes, and manage schedules across the entire transit network."
+            title={t("home.feature.fleet.title")}
+            description={t("home.feature.fleet.desc")}
           />
         </section>
 
@@ -78,33 +84,33 @@ export default function HomePage() {
             <CardHeader className="bg-sidebar text-sidebar-foreground">
               <CardTitle className="flex items-center gap-2">
                 <LayoutDashboard className="h-5 w-5" />
-                Admin Dashboard
+                {t("home.adminCard.title")}
               </CardTitle>
               <CardDescription className="text-sidebar-foreground/70">
-                Monitor and manage transit operations
+                {t("home.adminCard.desc")}
               </CardDescription>
             </CardHeader>
             <CardContent className="p-6">
               <ul className="mb-6 space-y-2 text-sm text-muted-foreground">
                 <li className="flex items-center gap-2">
                   <span className="h-1.5 w-1.5 rounded-full bg-primary" />
-                  Real-time fleet tracking with live map
+                  {t("home.adminCard.b1")}
                 </li>
                 <li className="flex items-center gap-2">
                   <span className="h-1.5 w-1.5 rounded-full bg-primary" />
-                  System metrics and performance analytics
+                  {t("home.adminCard.b2")}
                 </li>
                 <li className="flex items-center gap-2">
                   <span className="h-1.5 w-1.5 rounded-full bg-primary" />
-                  AI query logs and passenger insights
+                  {t("home.adminCard.b3")}
                 </li>
                 <li className="flex items-center gap-2">
                   <span className="h-1.5 w-1.5 rounded-full bg-primary" />
-                  Service alerts and notifications
+                  {t("home.adminCard.b4")}
                 </li>
               </ul>
               <Button asChild className="w-full">
-                <Link href="/dashboard">Open Dashboard</Link>
+                <Link href="/dashboard">{t("home.openDashboard")}</Link>
               </Button>
             </CardContent>
           </Card>
@@ -113,33 +119,33 @@ export default function HomePage() {
             <CardHeader className="bg-foreground text-background">
               <CardTitle className="flex items-center gap-2">
                 <Monitor className="h-5 w-5" />
-                Bus Stop Kiosk
+                {t("home.kioskCard.title")}
               </CardTitle>
               <CardDescription className="text-background/70">
-                Interactive passenger display simulator
+                {t("home.kioskCard.desc")}
               </CardDescription>
             </CardHeader>
             <CardContent className="p-6">
               <ul className="mb-6 space-y-2 text-sm text-muted-foreground">
                 <li className="flex items-center gap-2">
                   <span className="h-1.5 w-1.5 rounded-full bg-accent" />
-                  Live arrival times and ETA display
+                  {t("home.kioskCard.b1")}
                 </li>
                 <li className="flex items-center gap-2">
                   <span className="h-1.5 w-1.5 rounded-full bg-accent" />
-                  Voice-activated AI assistant
+                  {t("home.kioskCard.b2")}
                 </li>
                 <li className="flex items-center gap-2">
                   <span className="h-1.5 w-1.5 rounded-full bg-accent" />
-                  Service alerts and announcements
+                  {t("home.kioskCard.b3")}
                 </li>
                 <li className="flex items-center gap-2">
                   <span className="h-1.5 w-1.5 rounded-full bg-accent" />
-                  Text-to-speech responses
+                  {t("home.kioskCard.b4")}
                 </li>
               </ul>
               <Button variant="secondary" asChild className="w-full">
-                <Link href="/kiosk">Launch Kiosk</Link>
+                <Link href="/kiosk">{t("home.launchKiosk")}</Link>
               </Button>
             </CardContent>
           </Card>
@@ -148,7 +154,7 @@ export default function HomePage() {
 
       <footer className="border-t border-border bg-card">
         <div className="mx-auto max-w-7xl px-6 py-6 text-center text-sm text-muted-foreground">
-          Smart Bus Stop System - Real-time transit infrastructure
+          {t("home.footer")}
         </div>
       </footer>
     </div>

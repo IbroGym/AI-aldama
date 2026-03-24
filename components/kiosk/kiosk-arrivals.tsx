@@ -1,6 +1,7 @@
 import type { EtaPrediction, BusRoute } from "@/lib/types/database"
 import { Bus, Clock } from "lucide-react"
 import { Skeleton } from "@/components/ui/skeleton"
+import { useI18n } from "@/components/i18n-provider"
 
 interface EtaWithDetails extends EtaPrediction {
   bus?: { bus_number: string }
@@ -14,6 +15,8 @@ interface KioskArrivalsProps {
 }
 
 export function KioskArrivals({ etas, loading, currentTime }: KioskArrivalsProps) {
+  const { t } = useI18n()
+
   const getMinutesUntil = (dateStr: string) => {
     const arrival = new Date(dateStr)
     const diffMs = arrival.getTime() - currentTime.getTime()
@@ -22,9 +25,9 @@ export function KioskArrivals({ etas, loading, currentTime }: KioskArrivalsProps
 
   const formatArrival = (dateStr: string) => {
     const mins = getMinutesUntil(dateStr)
-    if (mins === 0) return "NOW"
-    if (mins === 1) return "1 min"
-    if (mins < 60) return `${mins} mins`
+    if (mins === 0) return t("common.now")
+    if (mins === 1) return `1 ${t("common.minute")}`
+    if (mins < 60) return `${mins} ${t("common.minutes")}`
     return new Date(dateStr).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
   }
 
@@ -33,7 +36,7 @@ export function KioskArrivals({ etas, loading, currentTime }: KioskArrivalsProps
       <div className="flex-1 rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
         <div className="mb-6 flex items-center gap-2">
           <Clock className="h-5 w-5 text-blue-500" />
-          <h2 className="text-xl font-semibold text-slate-900">Next Arrivals</h2>
+          <h2 className="text-xl font-semibold text-slate-900">{t("kiosk.nextArrivals")}</h2>
         </div>
         <div className="space-y-4">
           {Array.from({ length: 4 }).map((_, i) => (
@@ -48,14 +51,14 @@ export function KioskArrivals({ etas, loading, currentTime }: KioskArrivalsProps
     <div className="flex-1 rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
       <div className="mb-6 flex items-center gap-2">
         <Clock className="h-5 w-5 text-blue-500" />
-        <h2 className="text-xl font-semibold text-slate-900">Next Arrivals</h2>
+        <h2 className="text-xl font-semibold text-slate-900">{t("kiosk.nextArrivals")}</h2>
       </div>
 
       {etas.length === 0 ? (
         <div className="flex h-48 items-center justify-center text-slate-400">
           <div className="text-center">
             <Bus className="mx-auto mb-2 h-12 w-12 text-slate-300" />
-            <p>No upcoming arrivals at this stop</p>
+            <p>{t("kiosk.noUpcomingArrivals")}</p>
           </div>
         </div>
       ) : (
@@ -85,10 +88,10 @@ export function KioskArrivals({ etas, loading, currentTime }: KioskArrivalsProps
                   </div>
                   <div>
                     <div className="text-lg font-semibold text-slate-900">
-                      {eta.route?.route_name || "Unknown Route"}
+                      {eta.route?.route_name || t("kiosk.unknownRoute")}
                     </div>
                     <div className="text-sm text-slate-500">
-                      Bus {eta.bus?.bus_number || "Unknown"}
+                      {t("kiosk.bus")} {eta.bus?.bus_number || t("common.unknown")}
                     </div>
                   </div>
                 </div>
@@ -106,7 +109,7 @@ export function KioskArrivals({ etas, loading, currentTime }: KioskArrivalsProps
                         eta.confidence >= 0.75 ? "bg-yellow-500" : "bg-orange-500"
                       }`} 
                     />
-                    {Math.round(eta.confidence * 100)}% confidence
+                    {Math.round(eta.confidence * 100)}% {t("kiosk.confidence")}
                   </div>
                 </div>
               </div>

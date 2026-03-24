@@ -1,13 +1,17 @@
+"use client"
+
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import type { Alert } from "@/lib/types/database"
 import { Bell, AlertTriangle, Info, Wrench, Clock } from "lucide-react"
+import { useI18n } from "@/components/i18n-provider"
 
 interface ActiveAlertsProps {
   alerts: Alert[]
 }
 
 export function ActiveAlerts({ alerts }: ActiveAlertsProps) {
+  const { t } = useI18n()
   const getAlertIcon = (type: Alert["alert_type"]) => {
     switch (type) {
       case "delay": return <Clock className="h-4 w-4" />
@@ -43,7 +47,7 @@ export function ActiveAlerts({ alerts }: ActiveAlertsProps) {
       <CardHeader className="pb-4">
         <CardTitle className="flex items-center gap-2 text-base font-semibold">
           <Bell className="h-4 w-4" />
-          Active Alerts
+          {t("dashboard.activeAlerts")}
         </CardTitle>
       </CardHeader>
       <CardContent>
@@ -51,7 +55,7 @@ export function ActiveAlerts({ alerts }: ActiveAlertsProps) {
           {alerts.length === 0 ? (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <div className="h-2 w-2 rounded-full bg-green-500" />
-              No active alerts - All services running normally
+              {t("dashboard.noActiveAlerts")}
             </div>
           ) : (
             alerts.map((alert) => (
@@ -76,11 +80,11 @@ export function ActiveAlerts({ alerts }: ActiveAlertsProps) {
                   </Badge>
                 </div>
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <span>Started: {formatDate(alert.starts_at)}</span>
+                  <span>{t("dashboard.started")}: {formatDate(alert.starts_at)}</span>
                   {alert.ends_at && (
                     <>
                       <span>•</span>
-                      <span>Ends: {formatDate(alert.ends_at)}</span>
+                      <span>{t("dashboard.ends")}: {formatDate(alert.ends_at)}</span>
                     </>
                   )}
                 </div>

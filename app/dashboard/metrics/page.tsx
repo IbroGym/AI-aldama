@@ -6,6 +6,7 @@ import { DashboardHeader } from "@/components/dashboard/header"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Activity, Clock, Zap, Server } from "lucide-react"
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from "recharts"
+import { useI18n } from "@/components/i18n-provider"
 
 interface Metric {
   id: string
@@ -17,6 +18,7 @@ interface Metric {
 }
 
 export default function MetricsPage() {
+  const { t } = useI18n()
   const [metrics, setMetrics] = useState<Metric[]>([])
   const [loading, setLoading] = useState(true)
   const supabase = createClient()
@@ -50,7 +52,7 @@ export default function MetricsPage() {
     .map((m, i) => ({
       name: i + 1,
       value: Math.round(m.metric_value),
-      endpoint: m.tags?.endpoint || "unknown",
+      endpoint: m.tags?.endpoint || t("common.unknown"),
     })) || []
 
   // Get latest values for each metric
@@ -69,9 +71,9 @@ export default function MetricsPage() {
   if (loading) {
     return (
       <div className="flex flex-col">
-        <DashboardHeader title="System Metrics" description="Real-time system performance monitoring" />
+        <DashboardHeader title={t("dashboard.metricsTitle")} description={t("dashboard.metricsDescription")} />
         <main className="flex flex-1 items-center justify-center p-6">
-          <div className="text-muted-foreground">Loading metrics...</div>
+          <div className="text-muted-foreground">{t("common.loading")}</div>
         </main>
       </div>
     )
@@ -79,14 +81,14 @@ export default function MetricsPage() {
 
   return (
     <div className="flex flex-col">
-      <DashboardHeader title="System Metrics" description="Real-time system performance monitoring" />
+      <DashboardHeader title={t("dashboard.metricsTitle")} description={t("dashboard.metricsDescription")} />
 
       <main className="flex-1 space-y-6 p-6">
         {/* Current metrics */}
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">API Response Time</CardTitle>
+              <CardTitle className="text-sm font-medium text-muted-foreground">{t("dashboard.avgResponseTime")}</CardTitle>
               <Clock className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
@@ -94,47 +96,47 @@ export default function MetricsPage() {
                 {Math.round(latestMetrics["api_response_time"]?.metric_value || 0)}ms
               </div>
               <p className="text-xs text-muted-foreground">
-                {latestMetrics["api_response_time"]?.tags?.endpoint || "average"}
+                {latestMetrics["api_response_time"]?.tags?.endpoint || t("common.unknown")}
               </p>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Active Buses</CardTitle>
+              <CardTitle className="text-sm font-medium text-muted-foreground">{t("dashboard.activeBuses")}</CardTitle>
               <Activity className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-foreground">
                 {Math.round(latestMetrics["active_buses"]?.metric_value || 0)}
               </div>
-              <p className="text-xs text-muted-foreground">currently tracking</p>
+              <p className="text-xs text-muted-foreground">{t("dashboard.recentQueries")}</p>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Daily AI Queries</CardTitle>
+              <CardTitle className="text-sm font-medium text-muted-foreground">{t("dashboard.aiQueries")}</CardTitle>
               <Zap className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-foreground">
                 {Math.round(latestMetrics["daily_queries"]?.metric_value || 0)}
               </div>
-              <p className="text-xs text-muted-foreground">questions answered</p>
+              <p className="text-xs text-muted-foreground">{t("dashboard.recentQueries")}</p>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">System Uptime</CardTitle>
+              <CardTitle className="text-sm font-medium text-muted-foreground">{t("dashboard.metrics.systemUptime")}</CardTitle>
               <Server className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-foreground">
                 {(latestMetrics["system_uptime"]?.metric_value || 0).toFixed(1)}%
               </div>
-              <p className="text-xs text-muted-foreground">last 24 hours</p>
+              <p className="text-xs text-muted-foreground">{t("dashboard.metrics.last24h")}</p>
             </CardContent>
           </Card>
         </div>
@@ -143,7 +145,7 @@ export default function MetricsPage() {
         <div className="grid gap-6 lg:grid-cols-2">
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">API Response Time Trend</CardTitle>
+              <CardTitle className="text-base">{t("dashboard.metrics.responseTrend")}</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="h-64">
@@ -175,7 +177,7 @@ export default function MetricsPage() {
 
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Metrics Overview</CardTitle>
+              <CardTitle className="text-base">{t("dashboard.metrics.overview")}</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="h-64">
@@ -202,7 +204,7 @@ export default function MetricsPage() {
         {/* Detailed metrics table */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Recent Metric Values</CardTitle>
+            <CardTitle className="text-base">{t("dashboard.metrics.recentValues")}</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
@@ -213,7 +215,7 @@ export default function MetricsPage() {
                       {name.replace(/_/g, " ")}
                     </div>
                     <div className="text-xs text-muted-foreground">
-                      {values[0]?.tags?.endpoint || values[0]?.tags?.service || "system"}
+                      {values[0]?.tags?.endpoint || values[0]?.tags?.service || t("common.unknown")}
                     </div>
                   </div>
                   <div className="text-right">
@@ -221,7 +223,7 @@ export default function MetricsPage() {
                       {values[0]?.metric_value.toFixed(1)} {values[0]?.metric_unit}
                     </div>
                     <div className="text-xs text-muted-foreground">
-                      avg: {(values.reduce((sum, v) => sum + v.metric_value, 0) / values.length).toFixed(1)}
+                      {t("dashboard.metrics.average")}: {(values.reduce((sum, v) => sum + v.metric_value, 0) / values.length).toFixed(1)}
                     </div>
                   </div>
                 </div>

@@ -1,18 +1,22 @@
+"use client"
+
 import type { BusStop } from "@/lib/types/database"
 import { MapPin } from "lucide-react"
+import { useI18n } from "@/components/i18n-provider"
 
 interface KioskMapProps {
   stop?: BusStop
 }
 
 export function KioskMap({ stop }: KioskMapProps) {
+  const { t } = useI18n()
   return (
     <div className="flex flex-col gap-3 rounded-3xl border border-slate-200 bg-white p-4 shadow-sm lg:p-5">
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <MapPin className="h-5 w-5 text-blue-500" />
           <div className="text-sm font-semibold text-slate-900">
-            Stop location
+            {t("kiosk.stopLocation")}
           </div>
         </div>
         {stop?.zone && (
@@ -45,7 +49,7 @@ export function KioskMap({ stop }: KioskMapProps) {
 
         {!stop && (
           <div className="absolute inset-0 flex items-center justify-center text-xs text-slate-500">
-            No stop selected
+            {t("kiosk.noStopSelected")}
           </div>
         )}
       </div>

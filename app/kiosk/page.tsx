@@ -5,12 +5,19 @@ import { KioskShell } from "@/components/kiosk/kiosk-shell"
 export default async function KioskPage() {
   const supabase = await createClient()
 
+  // A featured stop that should always be available on the kiosk UI.
+  // This uses `stop_code` because GTFS import sets it to `stop_id` when `stop_code` is absent.
+  const featuredStopCode = "ccd5e97f-c483-4209-96d7-8d64466fdc26"
+  const featuredStopDisplayName = "Назарбаев Университет"
+
   // Default to first stop for demo
   const { data: stops } = await supabase
     .from("bus_stops")
     .select("*")
     .eq("is_active", true)
-    .eq("has_display", true)
+    // Normally we show only stops configured for a physical display.
+    // For this specific stop, include it even if `has_display=false`.
+    .or(`has_display.eq.true,stop_code.eq.${featuredStopCode}`)
     .order("name")
 
   const defaultStop = stops?.[0]
@@ -24,7 +31,9 @@ export default async function KioskPage() {
   return (
     <KioskShell>
       <KioskDisplay 
-        stops={stops || []} 
+        stops={(stops || []).map((s) =>
+          s.stop_code === featuredStopCode ? { ...s, name: featuredStopDisplayName } : s
+        )}
         defaultStopId={defaultStop?.id}
         alerts={alerts || []}
       />

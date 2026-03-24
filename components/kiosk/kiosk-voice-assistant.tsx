@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, useCallback } from "react"
 import { Mic, MicOff, Volume2, Send, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
+import { useI18n } from "@/components/i18n-provider"
 
 // Web Speech API types
 interface SpeechRecognitionEvent extends Event {
@@ -63,6 +64,7 @@ interface Message {
 }
 
 export function KioskVoiceAssistant({ stopId, stopName }: KioskVoiceAssistantProps) {
+  const { locale, t } = useI18n()
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState("")
   const [isListening, setIsListening] = useState(false)
@@ -109,6 +111,7 @@ export function KioskVoiceAssistant({ stopId, stopName }: KioskVoiceAssistantPro
           question,
           stopId,
           stopName,
+          locale,
         }),
       })
 
@@ -116,7 +119,7 @@ export function KioskVoiceAssistant({ stopId, stopName }: KioskVoiceAssistantPro
       
       const assistantMessage: Message = { 
         role: "assistant", 
-        content: data.answer || "I'm sorry, I couldn't understand that question."
+          content: data.answer || t("ai.fallbackUnknownQuestion")
       }
       setMessages((prev) => [...prev, assistantMessage])
       
@@ -124,7 +127,7 @@ export function KioskVoiceAssistant({ stopId, stopName }: KioskVoiceAssistantPro
     } catch {
       const errorMessage: Message = {
         role: "assistant",
-        content: "I'm sorry, there was an error processing your question. Please try again.",
+        content: t("ai.fallbackError"),
       }
       setMessages((prev) => [...prev, errorMessage])
     } finally {
@@ -140,7 +143,7 @@ export function KioskVoiceAssistant({ stopId, stopName }: KioskVoiceAssistantPro
       const recognition = new SpeechRecognitionAPI()
       recognition.continuous = false
       recognition.interimResults = false
-      recognition.lang = "en-US"
+      recognition.lang = locale === "ru" ? "ru-RU" : locale === "kk" ? "kk-KZ" : "en-US"
 
       recognition.onresult = (event: SpeechRecognitionEvent) => {
         const transcript = event.results[0][0].transcript
@@ -158,11 +161,11 @@ export function KioskVoiceAssistant({ stopId, stopName }: KioskVoiceAssistantPro
 
       recognitionRef.current = recognition
     }
-  }, [])
+  }, [locale])
 
   const toggleListening = () => {
     if (!recognitionRef.current) {
-      alert("Speech recognition is not supported in your browser")
+      alert(t("kiosk.speechNotSupported"))
       return
     }
 
@@ -187,12 +190,12 @@ export function KioskVoiceAssistant({ stopId, stopName }: KioskVoiceAssistantPro
       <div className="mb-4 flex items-center justify-between">
         <h3 className="flex items-center gap-2 font-semibold text-slate-900">
           <Mic className="h-5 w-5 text-blue-500" />
-          Voice Assistant
+          {t("kiosk.voiceAssistant")}
         </h3>
         {isSpeaking && (
           <div className="flex items-center gap-1 text-xs text-blue-600">
             <Volume2 className="h-4 w-4 animate-pulse" />
-            Speaking...
+            {t("kiosk.speaking")}
           </div>
         )}
       </div>
@@ -202,7 +205,7 @@ export function KioskVoiceAssistant({ stopId, stopName }: KioskVoiceAssistantPro
         {messages.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center text-center text-sm text-slate-400">
             <Mic className="mb-2 h-8 w-8 text-slate-300" />
-            <p>Ask me about bus arrivals, routes, or schedules</p>
+            <p>{t("kiosk.askPlaceholder")}</p>
           </div>
         ) : (
           messages.map((msg, i) => (
@@ -221,7 +224,7 @@ export function KioskVoiceAssistant({ stopId, stopName }: KioskVoiceAssistantPro
         {isLoading && (
           <div className="flex items-center gap-2 text-sm text-slate-500">
             <Loader2 className="h-4 w-4 animate-spin" />
-            Thinking...
+            {t("kiosk.thinking")}
           </div>
         )}
         <div ref={messagesEndRef} />
@@ -265,7 +268,7 @@ export function KioskVoiceAssistant({ stopId, stopName }: KioskVoiceAssistantPro
               handleSubmit()
             }
           }}
-          placeholder="Type or speak your question..."
+          placeholder={t("kiosk.typeOrSpeak")}
           className="min-h-10 resize-none border-slate-300 bg-white text-slate-900 placeholder:text-slate-400"
           rows={1}
         />

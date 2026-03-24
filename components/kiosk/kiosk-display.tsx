@@ -11,6 +11,7 @@ import { KioskStopSelector } from "./kiosk-stop-selector"
 import { KioskMap } from "./kiosk-map"
 import { KioskWeather } from "./kiosk-weather"
 import { KioskEmergencyActions } from "./kiosk-emergency-actions"
+import { useI18n } from "@/components/i18n-provider"
 
 interface KioskDisplayProps {
   stops: BusStop[]
@@ -23,17 +24,36 @@ interface EtaWithDetails extends EtaPrediction {
   route?: BusRoute
 }
 
-// All available routes in the system
-const ALL_ROUTES = [
-  { id: "r1", route_number: "42", route_name: "Downtown Express", color: "#3B82F6" },
-  { id: "r2", route_number: "15", route_name: "Airport Line", color: "#10B981" },
-  { id: "r3", route_number: "7", route_name: "University Circle", color: "#F59E0B" },
-  { id: "r4", route_number: "23", route_name: "Harbor Route", color: "#8B5CF6" },
-  { id: "r5", route_number: "31", route_name: "Tech Park Shuttle", color: "#EC4899" },
-  { id: "r6", route_number: "8", route_name: "Riverside Local", color: "#06B6D4" },
-  { id: "r7", route_number: "55", route_name: "Medical Center", color: "#EF4444" },
-  { id: "r8", route_number: "19", route_name: "Stadium Express", color: "#84CC16" },
+// Routes that should be shown on the kiosk
+const ROUTES_TO_SHOW = new Set(["10", "12"])
+const DEFAULT_ROUTE_NUMBERS = Array.from(ROUTES_TO_SHOW)
+
+// Per-stop overrides for routes that should be visible in the kiosk.
+// stop_code in bus_stops for this GTFS feed is the GTFS stop_id.
+const STOP_ROUTE_OVERRIDES: Record<string, string[]> = {
+  "ccd5e97f-c483-4209-96d7-8d64466fdc26": ["10"], // Назарбаев Университет
+  "12cabd75-d75d-4b82-8364-770c7812d47f": ["10"], // Назарбаев Университет (alternate stop_id)
+}
+
+// Mock ETAs fallback routes (when Supabase is missing/unavailable)
+const MOCK_ROUTES: Array<{ id: string; route_number: string; route_name: string; color: string }> = [
+  { id: "mock-r10", route_number: "10", route_name: "Route 10", color: "#3B82F6" },
+  { id: "mock-r12", route_number: "12", route_name: "Route 12", color: "#10B981" },
 ]
+const MOCK_ROUTES_BY_NUMBER = Object.fromEntries(MOCK_ROUTES.map((route) => [route.route_number, route]))
+
+function getAllowedRouteNumbers(stop?: BusStop): string[] {
+  const stopCode = stop?.stop_code
+  if (stopCode && STOP_ROUTE_OVERRIDES[stopCode]) return STOP_ROUTE_OVERRIDES[stopCode]
+
+  // Keep this robust even if GTFS stop IDs change between feed versions.
+  const normalizedName = (stop?.name || "").toLowerCase()
+  if (normalizedName.includes("nazarbaev") || normalizedName.includes("nazarbayev") || normalizedName.includes("назарбаев")) {
+    return ["10"]
+  }
+
+  return DEFAULT_ROUTE_NUMBERS
+}
 
 // Deterministic hash function for stop ID to get consistent routes per stop
 function hashString(str: string): number {
@@ -48,19 +68,14 @@ function hashString(str: string): number {
 
 // Generate mock ETAs that are always in the future relative to current time
 // Each stop gets a different subset of routes based on its ID
-function generateMockEtas(stopId: string): EtaWithDetails[] {
+function generateMockEtas(stopId: string, allowedRouteNumbers: string[]): EtaWithDetails[] {
   const now = new Date()
   const stopHash = hashString(stopId)
-  
-  // Each stop gets 2-4 different routes based on its hash
-  const numRoutes = 2 + (stopHash % 3)
-  const routeStartIndex = stopHash % ALL_ROUTES.length
-  const stopRoutes: typeof ALL_ROUTES = []
-  
-  for (let i = 0; i < numRoutes; i++) {
-    const routeIndex = (routeStartIndex + i * 2) % ALL_ROUTES.length
-    stopRoutes.push(ALL_ROUTES[routeIndex])
-  }
+  const stopRoutes = allowedRouteNumbers
+    .map((routeNumber) => MOCK_ROUTES_BY_NUMBER[routeNumber])
+    .filter((route): route is (typeof MOCK_ROUTES)[number] => !!route)
+
+  if (stopRoutes.length === 0) return []
   
   // Generate different arrival patterns per stop
   const baseOffset = (stopHash % 5) + 1 // 1-5 minutes base offset
@@ -69,7 +84,7 @@ function generateMockEtas(stopId: string): EtaWithDetails[] {
   const etas: EtaWithDetails[] = []
   let busCounter = 100 + (stopHash % 100)
   
-  // Generate arrivals for each route at this stop
+  // Generate arrivals for allowed routes at this stop
   for (let routeIdx = 0; routeIdx < stopRoutes.length; routeIdx++) {
     const route = stopRoutes[routeIdx]
     const routeOffset = baseOffset + (routeIdx * 3) // Stagger routes
@@ -105,6 +120,7 @@ function generateMockEtas(stopId: string): EtaWithDetails[] {
 }
 
 export function KioskDisplay({ stops, defaultStopId, alerts }: KioskDisplayProps) {
+  const { t } = useI18n()
   const [selectedStopId, setSelectedStopId] = useState(defaultStopId || stops[0]?.id)
   const [etas, setEtas] = useState<EtaWithDetails[]>([])
   const [loading, setLoading] = useState(true)
@@ -112,6 +128,7 @@ export function KioskDisplay({ stops, defaultStopId, alerts }: KioskDisplayProps
   const [usesMockData, setUsesMockData] = useState(false)
 
   const selectedStop = stops.find(s => s.id === selectedStopId)
+  const allowedRouteNumbers = getAllowedRouteNumbers(selectedStop)
   const supabase = useMemo(() => createClient(), [])
 
   // Update time every second
@@ -128,7 +145,7 @@ export function KioskDisplay({ stops, defaultStopId, alerts }: KioskDisplayProps
 
     // If supabase is not configured, use mock data
     if (!supabase) {
-      setEtas(generateMockEtas(selectedStopId))
+      setEtas(generateMockEtas(selectedStopId, allowedRouteNumbers))
       setLoading(false)
       setUsesMockData(true)
       return
@@ -142,27 +159,33 @@ export function KioskDisplay({ stops, defaultStopId, alerts }: KioskDisplayProps
         .eq("stop_id", selectedStopId)
         .gte("predicted_arrival", new Date().toISOString())
         .order("predicted_arrival", { ascending: true })
-        .limit(6)
+        // Fetch more so we can filter to only routes 10/12.
+        .limit(30)
 
       if (error) {
         console.log("[v0] Supabase error, using mock data:", error.message)
-        setEtas(generateMockEtas(selectedStopId))
+        setEtas(generateMockEtas(selectedStopId, allowedRouteNumbers))
         setUsesMockData(true)
       } else if (!data || data.length === 0) {
         // No data in database, use mock data for demonstration
-        setEtas(generateMockEtas(selectedStopId))
+        setEtas(generateMockEtas(selectedStopId, allowedRouteNumbers))
         setUsesMockData(true)
       } else {
-        setEtas(data)
+        const allowedRouteSet = new Set(allowedRouteNumbers)
+        const filtered = data
+          .filter((eta) => allowedRouteSet.has(String(eta.route?.route_number ?? "")))
+          .slice(0, 6)
+
+        setEtas(filtered)
         setUsesMockData(false)
       }
     } catch (err) {
       console.log("[v0] Fetch error, using mock data:", err)
-      setEtas(generateMockEtas(selectedStopId))
+      setEtas(generateMockEtas(selectedStopId, allowedRouteNumbers))
       setUsesMockData(true)
     }
     setLoading(false)
-  }, [selectedStopId, supabase])
+  }, [selectedStopId, supabase, allowedRouteNumbers])
 
   useEffect(() => {
     fetchEtas()
@@ -177,11 +200,11 @@ export function KioskDisplay({ stops, defaultStopId, alerts }: KioskDisplayProps
     if (!usesMockData || !selectedStopId) return
 
     const refreshInterval = setInterval(() => {
-      setEtas(generateMockEtas(selectedStopId))
+      setEtas(generateMockEtas(selectedStopId, allowedRouteNumbers))
     }, 60000) // Refresh mock data every minute
 
     return () => clearInterval(refreshInterval)
-  }, [usesMockData, selectedStopId])
+  }, [usesMockData, selectedStopId, allowedRouteNumbers])
 
   // Subscribe to realtime updates (only if supabase is configured)
   useEffect(() => {
@@ -212,7 +235,7 @@ export function KioskDisplay({ stops, defaultStopId, alerts }: KioskDisplayProps
   return (
     <div className="flex min-h-screen flex-col bg-[#f4f7fb] text-slate-900">
       <KioskHeader 
-        stopName={selectedStop?.name || "Unknown Stop"} 
+        stopName={selectedStop?.name || t("kiosk.unknownStop")} 
         currentTime={currentTime}
         stopCode={selectedStop?.stop_code}
       />
@@ -260,8 +283,8 @@ export function KioskDisplay({ stops, defaultStopId, alerts }: KioskDisplayProps
 
       <footer className="border-t border-slate-200 bg-white/80 px-4 py-3 backdrop-blur">
         <div className="flex items-center justify-between text-xs text-slate-500">
-          <span>Smart Bus Stop System</span>
-          <span>Ask anything about your trip</span>
+          <span>{t("kiosk.footerLeft")}</span>
+          <span>{t("kiosk.footerRight")}</span>
         </div>
       </footer>
     </div>

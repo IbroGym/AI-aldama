@@ -1,23 +1,27 @@
+"use client"
+
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import type { AiQueryLog } from "@/lib/types/database"
 import { MessageSquare, CheckCircle, XCircle } from "lucide-react"
+import { useI18n } from "@/components/i18n-provider"
 
 interface RecentQueriesProps {
   queries: AiQueryLog[]
 }
 
 export function RecentQueries({ queries }: RecentQueriesProps) {
+  const { t } = useI18n()
   const formatTime = (dateStr: string) => {
     const date = new Date(dateStr)
     const now = new Date()
     const diffMs = now.getTime() - date.getTime()
     const diffMins = Math.round(diffMs / 60000)
     
-    if (diffMins < 1) return "Just now"
-    if (diffMins === 1) return "1 min ago"
-    if (diffMins < 60) return `${diffMins} mins ago`
-    if (diffMins < 1440) return `${Math.round(diffMins / 60)} hrs ago`
+    if (diffMins < 1) return t("dashboard.justNow")
+    if (diffMins === 1) return `1 ${t("dashboard.minAgo")}`
+    if (diffMins < 60) return `${diffMins} ${t("dashboard.minsAgo")}`
+    if (diffMins < 1440) return `${Math.round(diffMins / 60)} ${t("dashboard.hrsAgo")}`
     
     return date.toLocaleDateString()
   }
@@ -33,7 +37,7 @@ export function RecentQueries({ queries }: RecentQueriesProps) {
   }
 
   const formatIntent = (intent: string | null) => {
-    if (!intent) return "Unknown"
+    if (!intent) return t("common.unknown")
     return intent.split("_").map(word => 
       word.charAt(0).toUpperCase() + word.slice(1)
     ).join(" ")
@@ -44,13 +48,13 @@ export function RecentQueries({ queries }: RecentQueriesProps) {
       <CardHeader className="pb-4">
         <CardTitle className="flex items-center gap-2 text-base font-semibold">
           <MessageSquare className="h-4 w-4" />
-          Recent AI Queries
+          {t("dashboard.recentAiQueries")}
         </CardTitle>
       </CardHeader>
       <CardContent>
         <div className="space-y-4">
           {queries.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No recent queries</p>
+            <p className="text-sm text-muted-foreground">{t("dashboard.noRecentQueries")}</p>
           ) : (
             queries.map((query) => (
               <div key={query.id} className="space-y-2">
@@ -60,7 +64,7 @@ export function RecentQueries({ queries }: RecentQueriesProps) {
                       {query.question}
                     </p>
                     <p className="text-xs text-muted-foreground line-clamp-1">
-                      {query.answer || "No response"}
+                      {query.answer || t("dashboard.noResponse")}
                     </p>
                   </div>
                   <div className="flex items-center gap-1">
@@ -77,7 +81,7 @@ export function RecentQueries({ queries }: RecentQueriesProps) {
                   </Badge>
                   {query.stop && (
                     <span className="text-muted-foreground">
-                      at {query.stop.name}
+                      {t("dashboard.atStop")} {query.stop.name}
                     </span>
                   )}
                   <span className="text-muted-foreground">

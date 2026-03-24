@@ -1,6 +1,8 @@
 import React from "react"
 import type { Metadata } from 'next'
 import { Analytics } from '@vercel/analytics/next'
+import { I18nProvider } from "@/components/i18n-provider"
+import { getServerLocale } from "@/lib/i18n/server"
 import './globals.css'
 
 
@@ -27,15 +29,19 @@ export const metadata: Metadata = {
   },
 }
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode
 }>) {
+  const locale = await getServerLocale()
+
   return (
-    <html lang="en">
+    <html lang={locale}>
       <body className="font-sans">
-      {children}
+        <I18nProvider initialLocale={locale}>
+          {children}
+        </I18nProvider>
       </body>
     </html>
   )

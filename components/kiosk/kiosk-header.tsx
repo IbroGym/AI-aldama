@@ -1,5 +1,7 @@
 import { Bus, MapPin } from "lucide-react"
 import Link from "next/link"
+import { LanguageSwitcher } from "@/components/language-switcher"
+import { useI18n } from "@/components/i18n-provider"
 
 interface KioskHeaderProps {
   stopName: string
@@ -8,8 +10,34 @@ interface KioskHeaderProps {
 }
 
 export function KioskHeader({ stopName, currentTime, stopCode }: KioskHeaderProps) {
+  const { locale } = useI18n()
+  const localeTag = locale === "kk" ? "kk-KZ" : locale === "ru" ? "ru-RU" : "en-US"
+  const kkWeekdaysMondayFirst = [
+    "Дүйсенбі",
+    "Сейсенбі",
+    "Сәрсенбі",
+    "Бейсенбі",
+    "Жұма",
+    "Сенбі",
+    "Жексенбі",
+  ]
+  const kkMonths = [
+    "Қаңтар",
+    "Ақпан",
+    "Наурыз",
+    "Сәуір",
+    "Мамыр",
+    "Маусым",
+    "Шілде",
+    "Тамыз",
+    "Қыркүйек",
+    "Қазан",
+    "Қараша",
+    "Желтоқсан",
+  ]
+
   const formatTime = (date: Date) => {
-    return date.toLocaleTimeString([], { 
+    return date.toLocaleTimeString(localeTag, { 
       hour: '2-digit', 
       minute: '2-digit',
       second: '2-digit'
@@ -17,7 +45,16 @@ export function KioskHeader({ stopName, currentTime, stopCode }: KioskHeaderProp
   }
 
   const formatDate = (date: Date) => {
-    return date.toLocaleDateString([], { 
+    if (locale === "kk") {
+      // JS getDay(): Sunday=0 ... Saturday=6. Convert to Monday-first index.
+      const mondayFirstIndex = (date.getDay() + 6) % 7
+      const weekday = kkWeekdaysMondayFirst[mondayFirstIndex]
+      const month = kkMonths[date.getMonth()]
+      const day = date.getDate()
+      return `${weekday}, ${day} ${month.toLowerCase()}`
+    }
+
+    return date.toLocaleDateString(localeTag, { 
       weekday: 'long',
       month: 'long',
       day: 'numeric'
@@ -48,11 +85,14 @@ export function KioskHeader({ stopName, currentTime, stopCode }: KioskHeaderProp
             </div>
           </div>
 
-          <div className="text-right">
-            <div className="text-3xl font-bold tabular-nums text-slate-900">
-              {formatTime(currentTime)}
+          <div className="flex items-center gap-4">
+            <LanguageSwitcher />
+            <div className="text-right">
+              <div suppressHydrationWarning className="text-3xl font-bold tabular-nums text-slate-900">
+                {formatTime(currentTime)}
+              </div>
+              <div suppressHydrationWarning className="text-sm text-slate-500">{formatDate(currentTime)}</div>
             </div>
-            <div className="text-sm text-slate-500">{formatDate(currentTime)}</div>
           </div>
         </div>
       </div>

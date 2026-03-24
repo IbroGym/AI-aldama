@@ -3,8 +3,10 @@ import { DashboardHeader } from "@/components/dashboard/header"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Bus, MapPin, Gauge } from "lucide-react"
+import { getServerI18n } from "@/lib/i18n/server"
 
 export default async function FleetPage() {
+  const { t } = await getServerI18n()
   const supabase = await createClient()
 
   const { data: buses } = await supabase
@@ -27,7 +29,7 @@ export default async function FleetPage() {
 
   return (
     <div className="flex flex-col">
-      <DashboardHeader title="Fleet Management" description="Monitor and manage all buses" />
+      <DashboardHeader title={t("dashboard.fleetTitle")} description={t("dashboard.fleetDescription")} />
 
       <main className="flex-1 p-6">
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -47,22 +49,22 @@ export default async function FleetPage() {
                       {bus.bus_number}
                     </CardTitle>
                     <Badge variant={isActive ? "default" : "secondary"}>
-                      {isActive ? "Active" : "Inactive"}
+                      {isActive ? t("dashboard.active") : t("dashboard.inactive")}
                     </Badge>
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-3">
                   <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">License</span>
+                    <span className="text-muted-foreground">{t("dashboard.license")}</span>
                     <span className="font-medium text-foreground">{bus.license_plate}</span>
                   </div>
                   <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">Capacity</span>
-                    <span className="font-medium text-foreground">{bus.capacity} seats</span>
+                    <span className="text-muted-foreground">{t("dashboard.capacity")}</span>
+                    <span className="font-medium text-foreground">{bus.capacity} {t("dashboard.seats")}</span>
                   </div>
                   {bus.current_route && (
                     <div className="flex items-center justify-between text-sm">
-                      <span className="text-muted-foreground">Route</span>
+                      <span className="text-muted-foreground">{t("dashboard.route")}</span>
                       <Badge
                         variant="outline"
                         style={{
@@ -79,23 +81,23 @@ export default async function FleetPage() {
                       <div className="flex items-center justify-between text-sm">
                         <span className="flex items-center gap-1 text-muted-foreground">
                           <Gauge className="h-3 w-3" />
-                          Speed
+                          {t("dashboard.speed")}
                         </span>
                         <span className="font-medium text-foreground">
-                          {position.speed ? `${Math.round(position.speed)} km/h` : "Stationary"}
+                          {position.speed ? `${Math.round(position.speed)} km/h` : t("dashboard.stationary")}
                         </span>
                       </div>
                       <div className="flex items-center justify-between text-sm">
                         <span className="flex items-center gap-1 text-muted-foreground">
                           <MapPin className="h-3 w-3" />
-                          Location
+                          {t("dashboard.location")}
                         </span>
                         <span className="text-xs text-muted-foreground">
                           {position.latitude.toFixed(4)}, {position.longitude.toFixed(4)}
                         </span>
                       </div>
                       <div className="text-xs text-muted-foreground">
-                        Last update: {timeSinceUpdate === 0 ? "Just now" : `${timeSinceUpdate} min ago`}
+                        {t("dashboard.lastUpdate")}: {timeSinceUpdate === 0 ? t("dashboard.justNow") : `${timeSinceUpdate} ${t("dashboard.minAgo")}`}
                       </div>
                     </>
                   )}

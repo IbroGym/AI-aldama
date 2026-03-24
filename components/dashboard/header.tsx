@@ -6,6 +6,8 @@ import { RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useRouter } from "next/navigation"
 import { useTransition } from "react"
+import { useI18n } from "@/components/i18n-provider"
+import { LanguageSwitcher } from "@/components/language-switcher"
 
 interface DashboardHeaderProps {
   title: string
@@ -13,6 +15,7 @@ interface DashboardHeaderProps {
 }
 
 export function DashboardHeader({ title, description }: DashboardHeaderProps) {
+  const { t } = useI18n()
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
 
@@ -34,15 +37,18 @@ export function DashboardHeader({ title, description }: DashboardHeaderProps) {
           )}
         </div>
       </div>
-      <Button 
-        variant="ghost" 
-        size="icon" 
-        onClick={handleRefresh}
-        disabled={isPending}
-      >
-        <RefreshCw className={`h-4 w-4 ${isPending ? "animate-spin" : ""}`} />
-        <span className="sr-only">Refresh data</span>
-      </Button>
+      <div className="flex items-center gap-2">
+        <LanguageSwitcher />
+        <Button 
+          variant="ghost" 
+          size="icon" 
+          onClick={handleRefresh}
+          disabled={isPending}
+        >
+          <RefreshCw className={`h-4 w-4 ${isPending ? "animate-spin" : ""}`} />
+          <span className="sr-only">{t("common.refreshData")}</span>
+        </Button>
+      </div>
     </header>
   )
 }

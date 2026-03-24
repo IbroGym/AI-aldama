@@ -3,12 +3,14 @@
 import { useState, useEffect } from "react"
 import type { Alert } from "@/lib/types/database"
 import { AlertTriangle, Info, Clock, Wrench, ChevronLeft, ChevronRight } from "lucide-react"
+import { useI18n } from "@/components/i18n-provider"
 
 interface KioskAlertsProps {
   alerts: Alert[]
 }
 
 export function KioskAlerts({ alerts }: KioskAlertsProps) {
+  const { t } = useI18n()
   const [currentIndex, setCurrentIndex] = useState(0)
 
   // Auto-rotate through alerts
@@ -27,7 +29,7 @@ export function KioskAlerts({ alerts }: KioskAlertsProps) {
       <div className="rounded-2xl bg-green-50 p-4 ring-1 ring-green-300/70">
         <div className="flex items-center gap-2 text-green-700">
           <div className="h-2 w-2 animate-pulse rounded-full bg-green-500" />
-          <span className="font-medium">All services running normally</span>
+          <span className="font-medium">{t("kiosk.serviceNormal")}</span>
         </div>
       </div>
     )

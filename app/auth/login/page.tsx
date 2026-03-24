@@ -9,8 +9,11 @@ import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { useI18n } from "@/components/i18n-provider"
+import { LanguageSwitcher } from "@/components/language-switcher"
 
 export default function LoginPage() {
+  const { t } = useI18n()
   const router = useRouter()
   const searchParams = useSearchParams()
   const next = searchParams.get("next") || "/dashboard"
@@ -28,7 +31,7 @@ export default function LoginPage() {
     setError(null)
 
     if (!supabase) {
-      setError("Supabase не настроен. Проверь `.env.local`.")
+      setError(t("login.supabaseMissing"))
       setSubmitting(false)
       return
     }
@@ -57,11 +60,12 @@ export default function LoginPage() {
               <Bus className="h-5 w-5 text-primary-foreground" />
             </div>
             <div>
-              <CardTitle className="text-xl">Admin login</CardTitle>
+              <CardTitle className="text-xl">{t("login.title")}</CardTitle>
               <div className="text-sm text-muted-foreground">
-                Доступ к Dashboard для операторов
+                {t("login.subtitle")}
               </div>
             </div>
+            <LanguageSwitcher />
           </div>
         </CardHeader>
         <CardContent>
@@ -78,7 +82,7 @@ export default function LoginPage() {
               />
             </div>
             <div className="space-y-2">
-              <div className="text-sm font-medium">Password</div>
+              <div className="text-sm font-medium">{t("login.password")}</div>
               <Input
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -96,14 +100,14 @@ export default function LoginPage() {
             ) : null}
 
             <Button className="w-full" type="submit" disabled={submitting}>
-              {submitting ? "Signing in..." : "Sign in"}
+              {submitting ? t("login.signingIn") : t("login.signIn")}
             </Button>
           </form>
 
           <div className="mt-6 text-center text-sm text-muted-foreground">
-            Пассажирский экран{" "}
+            {t("login.kioskScreen")}{" "}
             <Link className="text-foreground underline underline-offset-4" href="/kiosk">
-              открыть киоск
+              {t("login.openKiosk")}
             </Link>
           </div>
         </CardContent>

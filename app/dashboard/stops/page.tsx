@@ -3,8 +3,10 @@ import { DashboardHeader } from "@/components/dashboard/header"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { MapPin, Monitor, Home } from "lucide-react"
+import { getServerI18n } from "@/lib/i18n/server"
 
 export default async function StopsPage() {
+  const { t } = await getServerI18n()
   const supabase = await createClient()
 
   const { data: stops } = await supabase
@@ -15,7 +17,7 @@ export default async function StopsPage() {
 
   // Group stops by zone
   const stopsByZone = stops?.reduce((acc, stop) => {
-    const zone = stop.zone || "Other"
+    const zone = stop.zone || t("kiosk.otherZone")
     if (!acc[zone]) acc[zone] = []
     acc[zone].push(stop)
     return acc
@@ -23,7 +25,7 @@ export default async function StopsPage() {
 
   return (
     <div className="flex flex-col">
-      <DashboardHeader title="Bus Stops" description="Manage all bus stops in the network" />
+      <DashboardHeader title={t("dashboard.stopsTitle")} description={t("dashboard.stopsDescription")} />
 
       <main className="flex-1 space-y-6 p-6">
         {Object.entries(stopsByZone || {}).map(([zone, zoneStops]) => (
@@ -32,7 +34,7 @@ export default async function StopsPage() {
               <Home className="h-5 w-5 text-muted-foreground" />
               {zone}
               <Badge variant="secondary" className="ml-2">
-                {zoneStops?.length} stops
+                {zoneStops?.length} {t("dashboard.stops").toLowerCase()}
               </Badge>
             </h2>
 
@@ -46,13 +48,13 @@ export default async function StopsPage() {
                         {stop.name}
                       </CardTitle>
                       <Badge variant={stop.is_active ? "default" : "secondary"}>
-                        {stop.is_active ? "Active" : "Inactive"}
+                        {stop.is_active ? t("dashboard.active") : t("dashboard.inactive")}
                       </Badge>
                     </div>
                   </CardHeader>
                   <CardContent className="space-y-3">
                     <div className="flex items-center justify-between text-sm">
-                      <span className="text-muted-foreground">Stop Code</span>
+                      <span className="text-muted-foreground">{t("dashboard.stop")} Code</span>
                       <span className="font-mono font-medium text-foreground">{stop.stop_code}</span>
                     </div>
                     {stop.address && (
@@ -64,13 +66,13 @@ export default async function StopsPage() {
                       {stop.has_shelter && (
                         <span className="flex items-center gap-1 text-muted-foreground">
                           <span className="h-2 w-2 rounded-full bg-green-500" />
-                          Shelter
+                          {t("kiosk.shelter")}
                         </span>
                       )}
                       {stop.has_display && (
                         <span className="flex items-center gap-1 text-muted-foreground">
                           <Monitor className="h-3 w-3" />
-                          Display
+                          {t("kiosk.display")}
                         </span>
                       )}
                     </div>

@@ -3,8 +3,10 @@ import { DashboardHeader } from "@/components/dashboard/header"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Route, MapPin, Bus } from "lucide-react"
+import { getServerI18n } from "@/lib/i18n/server"
 
 export default async function RoutesPage() {
+  const { t } = await getServerI18n()
   const supabase = await createClient()
 
   const { data: routes } = await supabase
@@ -39,7 +41,7 @@ export default async function RoutesPage() {
 
   return (
     <div className="flex flex-col">
-      <DashboardHeader title="Routes" description="Manage bus routes and schedules" />
+      <DashboardHeader title={t("dashboard.routesTitle")} description={t("dashboard.routesDescription")} />
 
       <main className="flex-1 space-y-4 p-6">
         {routes?.map((route) => {
@@ -60,17 +62,17 @@ export default async function RoutesPage() {
                     <div>
                       <CardTitle className="text-lg">{route.route_name}</CardTitle>
                       <p className="text-sm text-muted-foreground">
-                        {stops.length} stops
+                        {stops.length} {t("dashboard.stops").toLowerCase()}
                       </p>
                     </div>
                   </div>
                   <div className="flex items-center gap-3">
                     <div className="flex items-center gap-1 text-sm text-muted-foreground">
                       <Bus className="h-4 w-4" />
-                      {busCount} active
+                      {busCount} {t("dashboard.active").toLowerCase()}
                     </div>
                     <Badge variant={route.is_active ? "default" : "secondary"}>
-                      {route.is_active ? "Active" : "Inactive"}
+                      {route.is_active ? t("dashboard.active") : t("dashboard.inactive")}
                     </Badge>
                   </div>
                 </div>

@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import type { BusPosition, BusStop } from "@/lib/types/database"
 import { Bus, MapPin } from "lucide-react"
+import { useI18n } from "@/components/i18n-provider"
 
 interface BusMapProps {
   positions: BusPosition[]
@@ -11,6 +12,7 @@ interface BusMapProps {
 }
 
 export function BusMap({ positions, stops }: BusMapProps) {
+  const { t } = useI18n()
   // Calculate bounds for the simulated map
   const allLats = [...positions.map(p => p.latitude), ...stops.map(s => s.latitude)]
   const allLngs = [...positions.map(p => p.longitude), ...stops.map(s => s.longitude)]
@@ -32,15 +34,15 @@ export function BusMap({ positions, stops }: BusMapProps) {
     <Card className="flex flex-col">
       <CardHeader className="pb-4">
         <div className="flex items-center justify-between">
-          <CardTitle className="text-base font-semibold">Live Fleet Map</CardTitle>
+          <CardTitle className="text-base font-semibold">{t("dashboard.liveFleetMap")}</CardTitle>
           <div className="flex items-center gap-4 text-xs text-muted-foreground">
             <div className="flex items-center gap-1">
               <div className="h-3 w-3 rounded-full bg-primary" />
-              <span>Buses</span>
+              <span>{t("dashboard.buses")}</span>
             </div>
             <div className="flex items-center gap-1">
               <div className="h-3 w-3 rounded-full bg-accent" />
-              <span>Stops</span>
+              <span>{t("dashboard.stops")}</span>
             </div>
           </div>
         </div>
@@ -100,7 +102,7 @@ export function BusMap({ positions, stops }: BusMapProps) {
 
           {positions.length === 0 && stops.length === 0 && (
             <div className="absolute inset-0 flex items-center justify-center text-sm text-muted-foreground">
-              No active buses or stops to display
+              {t("dashboard.noActiveBusesOrStops")}
             </div>
           )}
         </div>
@@ -124,7 +126,7 @@ export function BusMap({ positions, stops }: BusMapProps) {
                   <span className="text-muted-foreground">{bus?.current_route?.route_name}</span>
                 </div>
                 <span className="text-xs text-muted-foreground">
-                  {position.speed ? `${Math.round(position.speed)} km/h` : 'Stationary'}
+                  {position.speed ? `${Math.round(position.speed)} km/h` : t("dashboard.stationary")}
                 </span>
               </div>
             )

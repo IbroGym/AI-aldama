@@ -5,8 +5,10 @@ import { BusMap } from "@/components/dashboard/bus-map"
 import { RecentQueries } from "@/components/dashboard/recent-queries"
 import { ActiveAlerts } from "@/components/dashboard/active-alerts"
 import { EtaList } from "@/components/dashboard/eta-list"
+import { getServerI18n } from "@/lib/i18n/server"
 
 export default async function DashboardPage() {
+  const { t } = await getServerI18n()
   const supabase = await createClient()
 
   const [
@@ -43,7 +45,7 @@ export default async function DashboardPage() {
 
   return (
     <div className="flex flex-col">
-      <DashboardHeader title="Dashboard Overview" />
+      <DashboardHeader title={t("dashboard.overviewTitle")} />
       
       <main className="flex-1 space-y-6 p-6">
         <StatsCards stats={stats} />

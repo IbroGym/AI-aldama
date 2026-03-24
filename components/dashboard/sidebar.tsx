@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/sidebar"
 import { Button } from "@/components/ui/button"
 import { createClient } from "@/lib/supabase/client"
+import { useI18n } from "@/components/i18n-provider"
 
 const mainNavItems = [
   { title: "Overview", href: "/dashboard", icon: LayoutDashboard },
@@ -47,6 +48,7 @@ const systemItems = [
 ]
 
 export function DashboardSidebar() {
+  const { t } = useI18n()
   const pathname = usePathname()
 
   async function signOut() {
@@ -63,15 +65,15 @@ export function DashboardSidebar() {
             <Bus className="h-5 w-5 text-sidebar-primary-foreground" />
           </div>
           <div>
-            <div className="font-semibold text-sidebar-foreground">Smart Bus</div>
-            <div className="text-xs text-sidebar-foreground/60">Transit System</div>
+            <div className="font-semibold text-sidebar-foreground">{t("common.smartBus")}</div>
+            <div className="text-xs text-sidebar-foreground/60">{t("common.transitSystem")}</div>
           </div>
         </Link>
       </SidebarHeader>
 
       <SidebarContent>
         <SidebarGroup>
-          <SidebarGroupLabel>Navigation</SidebarGroupLabel>
+          <SidebarGroupLabel>{t("dashboard.groupNavigation")}</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {mainNavItems.map((item) => (
@@ -82,7 +84,7 @@ export function DashboardSidebar() {
                   >
                     <Link href={item.href}>
                       <item.icon className="h-4 w-4" />
-                      <span>{item.title}</span>
+                      <span>{t(`dashboard.nav.${item.title.toLowerCase()}`, item.title)}</span>
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
@@ -92,7 +94,7 @@ export function DashboardSidebar() {
         </SidebarGroup>
 
         <SidebarGroup>
-          <SidebarGroupLabel>Monitoring</SidebarGroupLabel>
+          <SidebarGroupLabel>{t("dashboard.groupMonitoring")}</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {monitoringItems.map((item) => (
@@ -103,7 +105,7 @@ export function DashboardSidebar() {
                   >
                     <Link href={item.href}>
                       <item.icon className="h-4 w-4" />
-                      <span>{item.title}</span>
+                      <span>{item.title === "AI Queries" ? t("dashboard.nav.queries") : item.title === "Metrics" ? t("dashboard.nav.metrics") : item.title === "Alerts" ? t("dashboard.nav.alerts") : item.title}</span>
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
@@ -113,7 +115,7 @@ export function DashboardSidebar() {
         </SidebarGroup>
 
         <SidebarGroup>
-          <SidebarGroupLabel>System</SidebarGroupLabel>
+          <SidebarGroupLabel>{t("dashboard.groupSystem")}</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {systemItems.map((item) => (
@@ -124,7 +126,7 @@ export function DashboardSidebar() {
                   >
                     <Link href={item.href}>
                       <item.icon className="h-4 w-4" />
-                      <span>{item.title}</span>
+                      <span>{item.title === "Kiosk Demo" ? t("dashboard.kioskDemo") : item.title === "Settings" ? t("dashboard.settings") : item.title}</span>
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
@@ -138,10 +140,10 @@ export function DashboardSidebar() {
         <div className="space-y-3">
           <div className="flex items-center gap-2">
             <div className="h-2 w-2 rounded-full bg-green-500" />
-            <span className="text-xs text-sidebar-foreground/60">System Online</span>
+            <span className="text-xs text-sidebar-foreground/60">{t("dashboard.systemOnline")}</span>
           </div>
           <Button variant="secondary" className="w-full" onClick={signOut}>
-            Sign out
+            {t("dashboard.signOut")}
           </Button>
         </div>
       </SidebarFooter>

@@ -9,6 +9,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { useI18n } from "@/components/i18n-provider"
 
 interface KioskStopSelectorProps {
   stops: BusStop[]
@@ -17,9 +18,10 @@ interface KioskStopSelectorProps {
 }
 
 export function KioskStopSelector({ stops, selectedStopId, onSelect }: KioskStopSelectorProps) {
+  const { t } = useI18n()
   // Group stops by zone
   const stopsByZone = stops.reduce((acc, stop) => {
-    const zone = stop.zone || "Other"
+    const zone = stop.zone || t("kiosk.otherZone")
     if (!acc[zone]) acc[zone] = []
     acc[zone].push(stop)
     return acc
@@ -29,12 +31,12 @@ export function KioskStopSelector({ stops, selectedStopId, onSelect }: KioskStop
     <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200">
       <div className="mb-3 flex items-center gap-2">
         <MapPin className="h-5 w-5 text-blue-500" />
-        <h3 className="font-semibold text-slate-900">Select Stop</h3>
+        <h3 className="font-semibold text-slate-900">{t("kiosk.selectStop")}</h3>
       </div>
 
       <Select value={selectedStopId} onValueChange={onSelect}>
         <SelectTrigger className="w-full border-slate-300 bg-white text-slate-900 hover:bg-slate-50 [&>svg]:text-slate-400">
-          <SelectValue placeholder="Choose a stop" />
+          <SelectValue placeholder={t("kiosk.chooseStop")} />
         </SelectTrigger>
         <SelectContent className="max-h-64 border-slate-200 bg-white text-slate-900">
           {Object.entries(stopsByZone).map(([zone, zoneStops]) => (
@@ -68,13 +70,13 @@ export function KioskStopSelector({ stops, selectedStopId, onSelect }: KioskStop
             {stops.find(s => s.id === selectedStopId)?.has_shelter && (
               <span className="flex items-center gap-1">
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                Shelter
+                {t("kiosk.shelter")}
               </span>
             )}
             {stops.find(s => s.id === selectedStopId)?.has_display && (
               <span className="flex items-center gap-1">
                 <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
-                Display
+                {t("kiosk.display")}
               </span>
             )}
           </div>
