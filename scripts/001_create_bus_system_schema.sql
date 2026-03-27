@@ -6,6 +6,10 @@ CREATE TABLE IF NOT EXISTS bus_stops (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   stop_code VARCHAR(20) UNIQUE NOT NULL,
   name VARCHAR(255) NOT NULL,
+  -- Optional localized display names. If NULL, the app falls back to `name`.
+  name_kk VARCHAR(255),
+  name_ru VARCHAR(255),
+  name_en VARCHAR(255),
   latitude DECIMAL(10, 8) NOT NULL,
   longitude DECIMAL(11, 8) NOT NULL,
   address TEXT,

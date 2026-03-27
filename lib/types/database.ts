@@ -2,6 +2,9 @@ export interface BusStop {
   id: string
   stop_code: string
   name: string
+  name_kk?: string | null
+  name_ru?: string | null
+  name_en?: string | null
   latitude: number
   longitude: number
   address: string | null

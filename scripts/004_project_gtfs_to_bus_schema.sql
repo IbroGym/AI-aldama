@@ -34,10 +34,13 @@
   $$;
 
   -- 1) Upsert bus_stops from gtfs.stops
-  INSERT INTO bus_stops (stop_code, name, latitude, longitude, address, zone, is_active)
+  INSERT INTO bus_stops (stop_code, name, name_kk, name_ru, name_en, latitude, longitude, address, zone, is_active)
   SELECT
     COALESCE(NULLIF(s.stop_code, ''), s.stop_id) AS stop_code,
     COALESCE(NULLIF(s.stop_name, ''), s.stop_id) AS name,
+    NULL AS name_kk,
+    NULL AS name_ru,
+    NULL AS name_en,
     s.stop_lat::DECIMAL(10, 8) AS latitude,
     s.stop_lon::DECIMAL(11, 8) AS longitude,
     NULLIF(s.stop_desc, '') AS address,
@@ -47,6 +50,9 @@
   WHERE s.stop_lat IS NOT NULL AND s.stop_lon IS NOT NULL
   ON CONFLICT (stop_code) DO UPDATE SET
     name = EXCLUDED.name,
+    name_kk = COALESCE(bus_stops.name_kk, EXCLUDED.name_kk),
+    name_ru = COALESCE(bus_stops.name_ru, EXCLUDED.name_ru),
+    name_en = COALESCE(bus_stops.name_en, EXCLUDED.name_en),
     latitude = EXCLUDED.latitude,
     longitude = EXCLUDED.longitude,
     address = EXCLUDED.address,

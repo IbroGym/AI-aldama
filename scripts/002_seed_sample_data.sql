@@ -2,17 +2,17 @@
 -- This creates sample data for development and demo purposes
 
 -- Insert sample bus stops
-INSERT INTO bus_stops (stop_code, name, latitude, longitude, address, zone, is_active, has_shelter, has_display) VALUES
-('STOP001', 'Central Station', 40.7128, -74.0060, '123 Main Street', 'Downtown', true, true, true),
-('STOP002', 'City Hall', 40.7135, -74.0071, '456 Government Ave', 'Downtown', true, true, true),
-('STOP003', 'Tech Park', 40.7185, -74.0045, '789 Innovation Blvd', 'Business', true, true, true),
-('STOP004', 'University Campus', 40.7205, -74.0025, '321 College Way', 'Education', true, true, true),
-('STOP005', 'Medical Center', 40.7095, -74.0090, '555 Health Drive', 'Medical', true, true, true),
-('STOP006', 'Shopping Mall', 40.7155, -74.0110, '777 Retail Plaza', 'Commercial', true, false, true),
-('STOP007', 'Residential North', 40.7250, -74.0080, '999 Oak Street', 'Residential', true, false, false),
-('STOP008', 'Residential South', 40.7050, -74.0040, '111 Pine Avenue', 'Residential', true, true, false),
-('STOP009', 'Airport Terminal', 40.6895, -73.9867, '1 Airport Road', 'Airport', true, true, true),
-('STOP010', 'Sports Arena', 40.7170, -74.0150, '222 Stadium Way', 'Entertainment', true, true, true)
+INSERT INTO bus_stops (stop_code, name, name_kk, name_ru, name_en, latitude, longitude, address, zone, is_active, has_shelter, has_display) VALUES
+('STOP001', 'Central Station', 'Орталық вокзал', 'Центральный вокзал', 'Central Station', 40.7128, -74.0060, '123 Main Street', 'Downtown', true, true, true),
+('STOP002', 'City Hall', 'Әкімдік', 'Мэрия', 'City Hall', 40.7135, -74.0071, '456 Government Ave', 'Downtown', true, true, true),
+('STOP003', 'Tech Park', 'Технопарк', 'Технопарк', 'Tech Park', 40.7185, -74.0045, '789 Innovation Blvd', 'Business', true, true, true),
+('STOP004', 'University Campus', 'Университет қалашығы', 'Университетский кампус', 'University Campus', 40.7205, -74.0025, '321 College Way', 'Education', true, true, true),
+('STOP005', 'Medical Center', 'Медициналық орталық', 'Медицинский центр', 'Medical Center', 40.7095, -74.0090, '555 Health Drive', 'Medical', true, true, true),
+('STOP006', 'Shopping Mall', 'Сауда орталығы', 'Торговый центр', 'Shopping Mall', 40.7155, -74.0110, '777 Retail Plaza', 'Commercial', true, false, true),
+('STOP007', 'Residential North', 'Тұрғын аудан (Солтүстік)', 'Жилой район (Север)', 'Residential North', 40.7250, -74.0080, '999 Oak Street', 'Residential', true, false, false),
+('STOP008', 'Residential South', 'Тұрғын аудан (Оңтүстік)', 'Жилой район (Юг)', 'Residential South', 40.7050, -74.0040, '111 Pine Avenue', 'Residential', true, true, false),
+('STOP009', 'Airport Terminal', 'Әуежай терминалы', 'Терминал аэропорта', 'Airport Terminal', 40.6895, -73.9867, '1 Airport Road', 'Airport', true, true, true),
+('STOP010', 'Sports Arena', 'Спорт аренасы', 'Спортивная арена', 'Sports Arena', 40.7170, -74.0150, '222 Stadium Way', 'Entertainment', true, true, true)
 ON CONFLICT (stop_code) DO NOTHING;
 
 -- Insert sample bus routes
