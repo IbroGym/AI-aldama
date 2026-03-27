@@ -12,6 +12,7 @@ import { KioskMap } from "./kiosk-map"
 import { KioskWeather } from "./kiosk-weather"
 import { KioskEmergencyActions } from "./kiosk-emergency-actions"
 import { useI18n } from "@/components/i18n-provider"
+import { getLocalizedStopName } from "@/lib/i18n/stops"
 
 interface KioskDisplayProps {
   stops: BusStop[]
@@ -120,14 +121,23 @@ function generateMockEtas(stopId: string, allowedRouteNumbers: string[]): EtaWit
 }
 
 export function KioskDisplay({ stops, defaultStopId, alerts }: KioskDisplayProps) {
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
   const [selectedStopId, setSelectedStopId] = useState(defaultStopId || stops[0]?.id)
   const [etas, setEtas] = useState<EtaWithDetails[]>([])
   const [loading, setLoading] = useState(true)
   const [currentTime, setCurrentTime] = useState(new Date())
   const [usesMockData, setUsesMockData] = useState(false)
 
-  const selectedStop = stops.find(s => s.id === selectedStopId)
+  const localizedStops = useMemo(
+    () =>
+      stops.map((s) => ({
+        ...s,
+        name: getLocalizedStopName(s.name, s.stop_code, locale, s),
+      })),
+    [stops, locale]
+  )
+
+  const selectedStop = localizedStops.find((s) => s.id === selectedStopId)
   const allowedRouteNumbers = getAllowedRouteNumbers(selectedStop)
   const supabase = useMemo(() => createClient(), [])
 
@@ -271,7 +281,7 @@ export function KioskDisplay({ stops, defaultStopId, alerts }: KioskDisplayProps
             />
             <div className="rounded-2xl border border-slate-200 bg-white p-4">
               <KioskStopSelector 
-                stops={stops} 
+                stops={localizedStops} 
                 selectedStopId={selectedStopId} 
                 onSelect={setSelectedStopId} 
               />
