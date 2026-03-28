@@ -133,3 +133,9 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Leaflet divIcon wrapper for animated bus markers */
+.bus-marker-root {
+  background: transparent !important;
+  border: none !important;
+}
