@@ -1,7 +1,12 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { ASTANA_CENTER, getMockAstanaTransit } from "./mock-astana"
-import { simulateVehicles, type DbBusLite } from "./simulation"
-import type { MapRouteDTO, MapStopDTO, TransitContextDTO, VehicleDTO } from "./types"
+import {
+  buildArrivalsForStop,
+  computeVehicleStates,
+  type DbBusLite,
+} from "./engine"
+import { vehiclesDtoFromStates } from "./simulation"
+import type { EtaResponsePayload, TransitContextDTO, VehicleDTO } from "./types"
 
 type StopJoin = {
   id: string
@@ -71,7 +76,7 @@ export async function loadTransitFromSupabase(
     return null
   }
 
-  const stops: MapStopDTO[] = (stopsData as StopRow[]).map((s) => ({
+  const stops = (stopsData as StopRow[]).map((s) => ({
     id: s.id,
     stop_code: s.stop_code,
     name: s.name,
@@ -87,12 +92,12 @@ export async function loadTransitFromSupabase(
     byRoute.set(row.route_id, list)
   }
 
-  const routes: MapRouteDTO[] = []
+  const routes: TransitContextDTO["routes"] = []
   for (const r of routesData as RouteRow[]) {
     const seq = (byRoute.get(r.id) ?? []).sort(
       (a, b) => a.stop_sequence - b.stop_sequence
     )
-    const orderedStops: MapStopDTO[] = []
+    const orderedStops: TransitContextDTO["stops"] = []
     for (const row of seq) {
       const sid = row.stop_id
       const fromJoin = pickStopJoin(row.stop)
@@ -167,6 +172,15 @@ export async function getTransitContext(
   return getMockAstanaTransit()
 }
 
+/** One simulation tick: shared by /api/vehicles and /api/eta. */
+export async function getSimulationSnapshot(supabase: SupabaseClient | null) {
+  const transit = await getTransitContext(supabase)
+  const dbBuses = supabase ? await loadDbBuses(supabase) : []
+  const server_time_ms = Date.now()
+  const states = computeVehicleStates(transit, server_time_ms, dbBuses)
+  return { transit, states, server_time_ms }
+}
+
 export interface VehiclesResponsePayload {
   vehicles: VehicleDTO[]
   highlighted_route_ids: string[]
@@ -181,18 +195,19 @@ export async function getVehiclesPayload(
   params: {
     focus_stop_id?: string | null
     filter_stop_only?: boolean
+    include_debug?: boolean
   }
 ): Promise<VehiclesResponsePayload> {
-  const transit = await getTransitContext(supabase)
-  const dbBuses = supabase ? await loadDbBuses(supabase) : []
-  const now = Date.now()
-  const { vehicles, highlighted_route_ids } = simulateVehicles(
+  const { transit, states, server_time_ms } = await getSimulationSnapshot(
+    supabase
+  )
+  const { vehicles, highlighted_route_ids } = vehiclesDtoFromStates(
     transit,
-    now,
-    dbBuses,
+    states,
     {
       focus_stop_id: params.focus_stop_id ?? null,
       filter_stop_only: params.filter_stop_only ?? false,
+      include_debug: params.include_debug ?? false,
     }
   )
 
@@ -202,7 +217,34 @@ export async function getVehiclesPayload(
     focus_stop_id: params.focus_stop_id ?? null,
     filter_stop_only: params.filter_stop_only ?? false,
     vehicle_data_source: "simulated",
-    server_time_ms: now,
+    server_time_ms,
+  }
+}
+
+export async function getEtaPayload(
+  supabase: SupabaseClient | null,
+  stopId: string,
+  includeDebug = false
+): Promise<EtaResponsePayload> {
+  const { transit, states, server_time_ms } = await getSimulationSnapshot(
+    supabase
+  )
+  const stopById = new Map(transit.stops.map((s) => [s.id, s]))
+  const arrivals = buildArrivalsForStop(
+    transit,
+    states,
+    stopId,
+    stopById,
+    server_time_ms,
+    includeDebug
+  )
+
+  return {
+    stop_id: stopId,
+    arrivals,
+    server_time_ms,
+    data_source: "simulated",
+    transit_data_source: transit.data_source,
   }
 }
 

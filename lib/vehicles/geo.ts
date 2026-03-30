@@ -37,6 +37,18 @@ export function cumulativeLengthsMeters(coords: LatLng[]): number[] {
   return out
 }
 
+type XY = { x: number; y: number }
+
+function toLocalMeters(origin: LatLng, p: LatLng): XY {
+  const latRad = (origin.lat * Math.PI) / 180
+  const mPerDegLat = 111_320
+  const mPerDegLng = 111_320 * Math.cos(latRad)
+  return {
+    x: (p.lng - origin.lng) * mPerDegLng,
+    y: (p.lat - origin.lat) * mPerDegLat,
+  }
+}
+
 /**
  * Point at distance along open polyline, looping by total length.
  * Returns position and heading (deg) for the segment containing the point.
@@ -70,28 +82,57 @@ export function pointAlongPolyline(
   }
 }
 
+/**
+ * Distance along polyline from start to closest projected point to `target`.
+ * Uses segment projection (continuous) instead of nearest vertex (discrete).
+ */
+export function closestPointAlongPolyline(
+  coords: LatLng[],
+  target: LatLng
+): { along_m: number; lateral_m: number } {
+  if (coords.length < 2) return { along_m: 0, lateral_m: Infinity }
+  const cum = cumulativeLengthsMeters(coords)
+  let bestAlong = 0
+  let bestLateral = Infinity
+
+  for (let i = 0; i < coords.length - 1; i++) {
+    const a = coords[i]
+    const b = coords[i + 1]
+    const axy = toLocalMeters(target, a)
+    const bxy = toLocalMeters(target, b)
+    const abx = bxy.x - axy.x
+    const aby = bxy.y - axy.y
+    const ab2 = abx * abx + aby * aby
+    const t = ab2 > 0 ? Math.max(0, Math.min(1, -(axy.x * abx + axy.y * aby) / ab2)) : 0
+    const px = axy.x + abx * t
+    const py = axy.y + aby * t
+    const lateral = Math.hypot(px, py)
+    if (lateral < bestLateral) {
+      const segLen = cum[i + 1] - cum[i]
+      bestLateral = lateral
+      bestAlong = cum[i] + segLen * t
+    }
+  }
+
+  return { along_m: bestAlong, lateral_m: bestLateral }
+}
+
 /** Distance along polyline from start to the closest point to `target` (forward-only wrap). */
 export function distanceToStopAlongRoute(
   coords: LatLng[],
   stopPosition: LatLng,
   vehicleDistanceAlong: number
-): { forward_m: number; stop_distance_along_m: number } {
+): { forward_m: number; stop_distance_along_m: number; lateral_m: number } {
   if (coords.length < 2) {
-    return { forward_m: 0, stop_distance_along_m: 0 }
+    return { forward_m: 0, stop_distance_along_m: 0, lateral_m: Infinity }
   }
   const cum = cumulativeLengthsMeters(coords)
   const total = cum[cum.length - 1] || 1
-  let bestIdx = 0
-  let bestD = Infinity
-  for (let i = 0; i < coords.length; i++) {
-    const d = haversineMeters(coords[i], stopPosition)
-    if (d < bestD) {
-      bestD = d
-      bestIdx = i
-    }
-  }
-  const stopAlong = cum[bestIdx]
+  const { along_m: stopAlong, lateral_m } = closestPointAlongPolyline(
+    coords,
+    stopPosition
+  )
   let forward = stopAlong - vehicleDistanceAlong
   if (forward < 0) forward += total
-  return { forward_m: forward, stop_distance_along_m: stopAlong }
+  return { forward_m: forward, stop_distance_along_m: stopAlong, lateral_m }
 }
