@@ -16,11 +16,13 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const stopId = searchParams.get("stop_id")
   const filter = searchParams.get("filter")
+  const debug = searchParams.get("debug") === "1"
 
   const supabase = await createClientOrNull()
   const payload = await getVehiclesPayload(supabase, {
     focus_stop_id: stopId || null,
     filter_stop_only: filter === "stop" && !!stopId,
+    include_debug: debug,
   })
 
   return NextResponse.json(payload)
