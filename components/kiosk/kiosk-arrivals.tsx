@@ -27,8 +27,7 @@ export function KioskArrivals({ etas, loading, currentTime }: KioskArrivalsProps
     const mins = getMinutesUntil(dateStr)
     if (mins === 0) return t("common.now")
     if (mins === 1) return `1 ${t("common.minute")}`
-    if (mins < 60) return `${mins} ${t("common.minutes")}`
-    return new Date(dateStr).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    return `${mins} ${t("common.minutes")}`
   }
 
   if (loading) {

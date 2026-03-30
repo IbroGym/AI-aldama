@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation"
 import {
   Bus,
   LayoutDashboard,
+  Map,
   MapPin,
   Route,
   MessageSquare,
@@ -31,6 +32,7 @@ import { useI18n } from "@/components/i18n-provider"
 
 const mainNavItems = [
   { title: "Overview", href: "/dashboard", icon: LayoutDashboard },
+  { title: "Map", href: "/dashboard/map", icon: Map },
   { title: "Fleet", href: "/dashboard/fleet", icon: Bus },
   { title: "Stops", href: "/dashboard/stops", icon: MapPin },
   { title: "Routes", href: "/dashboard/routes", icon: Route },
@@ -84,7 +86,14 @@ export function DashboardSidebar() {
                   >
                     <Link href={item.href}>
                       <item.icon className="h-4 w-4" />
-                      <span>{t(`dashboard.nav.${item.title.toLowerCase()}`, item.title)}</span>
+                      <span>
+                        {item.title === "Map"
+                          ? t("dashboard.nav.map")
+                          : t(
+                              `dashboard.nav.${item.title.toLowerCase()}`,
+                              item.title,
+                            )}
+                      </span>
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
