@@ -88,14 +88,32 @@ export function pointAlongPolyline(
  */
 export function closestPointAlongPolyline(
   coords: LatLng[],
-  target: LatLng
-): { along_m: number; lateral_m: number } {
-  if (coords.length < 2) return { along_m: 0, lateral_m: Infinity }
+  target: LatLng,
+  options?: {
+    previous_segment_index?: number
+    along_hint_m?: number
+    segment_search_window?: number
+  }
+): { along_m: number; lateral_m: number; segment_index: number } {
+  if (coords.length < 2) return { along_m: 0, lateral_m: Infinity, segment_index: 0 }
   const cum = cumulativeLengthsMeters(coords)
   let bestAlong = 0
   let bestLateral = Infinity
+  let bestSegmentIndex = 0
+  let bestScore = Infinity
+  const maxSeg = coords.length - 2
+  const hasPrev = options?.previous_segment_index != null
+  const prevSeg = Math.max(
+    0,
+    Math.min(maxSeg, options?.previous_segment_index ?? 0)
+  )
+  const window = Math.max(1, options?.segment_search_window ?? 8)
+  const start = hasPrev ? Math.max(0, prevSeg - window) : 0
+  const end = hasPrev ? Math.min(maxSeg, prevSeg + window) : maxSeg
+  const hintAlong = options?.along_hint_m
+  const total = cum[cum.length - 1] || 1
 
-  for (let i = 0; i < coords.length - 1; i++) {
+  for (let i = start; i <= end; i++) {
     const a = coords[i]
     const b = coords[i + 1]
     const axy = toLocalMeters(target, a)
@@ -107,14 +125,22 @@ export function closestPointAlongPolyline(
     const px = axy.x + abx * t
     const py = axy.y + aby * t
     const lateral = Math.hypot(px, py)
-    if (lateral < bestLateral) {
-      const segLen = cum[i + 1] - cum[i]
+    const segLen = cum[i + 1] - cum[i]
+    const along = cum[i] + segLen * t
+    const hintPenalty =
+      hintAlong == null
+        ? 0
+        : Math.min(Math.abs(along - hintAlong), total - Math.abs(along - hintAlong))
+    const score = lateral + hintPenalty * 0.2
+    if (score < bestScore) {
+      bestScore = score
       bestLateral = lateral
-      bestAlong = cum[i] + segLen * t
+      bestAlong = along
+      bestSegmentIndex = i
     }
   }
 
-  return { along_m: bestAlong, lateral_m: bestLateral }
+  return { along_m: bestAlong, lateral_m: bestLateral, segment_index: bestSegmentIndex }
 }
 
 /** Distance along polyline from start to the closest point to `target` (forward-only wrap). */

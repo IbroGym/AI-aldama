@@ -20,6 +20,9 @@ export interface MapRouteDTO {
   /** Polyline vertices [lat, lng] along the route (from ordered stops). */
   coordinates: [number, number][]
   stop_ids_ordered: string[]
+  order_source?: "override" | "db"
+  direction?: "outbound" | "inbound"
+  override_warnings?: string[]
 }
 
 export interface VehicleDTO {
@@ -47,6 +50,55 @@ export interface TransitContextDTO {
   stops: MapStopDTO[]
   routes: MapRouteDTO[]
   data_source: "supabase" | "mock"
+  route_order_diagnostics?: Array<{
+    route_id: string
+    route_number: string
+    route_name: string
+    order_source: "override" | "db"
+    direction?: "outbound" | "inbound"
+    warnings: string[]
+  }>
+  route_override_resolution_report?: Array<{
+    route_number: string
+    direction: "outbound" | "inbound"
+    route_id: string | null
+    route_name: string | null
+    source: "override" | "db"
+    trusted_total: number
+    resolved_total: number
+    exact_matches: string[]
+    fuzzy_matches: Array<{ trusted: string; matched: string; score: number }>
+    unresolved: string[]
+    warnings: string[]
+  }>
+  route_direction_debug?: Array<{
+    route_id: string
+    route_number: string
+    outbound_stop_ids: string[]
+    inbound_stop_ids: string[]
+    source: "stop_code_override" | "name_resolved" | "db"
+    warnings: string[]
+  }>
+  bus_stops_loaded_count?: number
+  bus_stops_load_scope?: string
+  bus_stops_active_query_count?: number
+  bus_stops_debug_code_supplement_count?: number
+  route10_debug_override_manifest?: {
+    outbound_entries: Array<{
+      override_stop_code: string
+      matched_by_stop_code: boolean
+      resolved_id: string | null
+      resolved_stop_code: string | null
+      resolved_name: string | null
+    }>
+    inbound_entries: Array<{
+      override_stop_code: string
+      matched_by_stop_code: boolean
+      resolved_id: string | null
+      resolved_stop_code: string | null
+      resolved_name: string | null
+    }>
+  }
 }
 
 /** Sorted arrivals at a stop — same simulation as map vehicles. */

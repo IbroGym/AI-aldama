@@ -39,6 +39,15 @@ export interface VehicleRuntimeState {
   coordinates: LatLng[]
 }
 
+type VehicleTrackState = {
+  last_now_ms: number
+  last_distance_along_m: number
+}
+
+const vehicleTrackByKey = new Map<string, VehicleTrackState>()
+const MAX_INTEGRATION_DT_S = 6
+const JUMP_WARN_METERS = 250
+
 export function strSeed(s: string): number {
   let h = 0
   for (let i = 0; i < s.length; i++) h = Math.imul(31, h) + s.charCodeAt(i)
@@ -119,6 +128,8 @@ export function computeVehicleStates(
 
   const out: VehicleRuntimeState[] = []
 
+  const seenKeys = new Set<string>()
+
   for (const route of transit.routes) {
     const coords: LatLng[] = route.coordinates.map(([lat, lng]) => ({
       lat,
@@ -135,8 +146,57 @@ export function computeVehicleStates(
         : [`sim:${route.id}:a`, `sim:${route.id}:b`]
 
     for (const id of unitIds) {
+      const trackKey = `${route.id}::${id}`
+      seenKeys.add(trackKey)
       const speed_mps = effectiveSpeedMps(id, nowMs)
-      const distance_along_m = distanceAlongAtTime(totalLen, id, nowMs)
+      const previous = vehicleTrackByKey.get(trackKey)
+      const seededDistance = distanceAlongAtTime(totalLen, id, nowMs)
+      let distance_along_m = seededDistance
+      let previousDistance = seededDistance
+
+      if (previous) {
+        previousDistance = previous.last_distance_along_m
+        const dt_s = Math.max(
+          0,
+          Math.min(MAX_INTEGRATION_DT_S, (nowMs - previous.last_now_ms) / 1000)
+        )
+        const rawDistance = previous.last_distance_along_m + speed_mps * dt_s
+        distance_along_m = rawDistance % totalLen
+        if (distance_along_m < 0) distance_along_m += totalLen
+      }
+
+      vehicleTrackByKey.set(trackKey, {
+        last_now_ms: nowMs,
+        last_distance_along_m: distance_along_m,
+      })
+
+      const expectedDelta =
+        previous != null
+          ? speed_mps *
+            Math.max(
+              0,
+              Math.min(MAX_INTEGRATION_DT_S, (nowMs - previous.last_now_ms) / 1000)
+            )
+          : 0
+      const actualDelta =
+        previous != null
+          ? forwardDistanceDelta(
+              previous.last_distance_along_m,
+              distance_along_m,
+              totalLen
+            )
+          : 0
+      if (previous != null) {
+        console.debug(
+          `[vehicle-motion] vehicle_id=${id} prev_distance_along_m=${previousDistance.toFixed(1)} new_distance_along_m=${distance_along_m.toFixed(1)}`
+        )
+      }
+      if (previous != null && Math.abs(actualDelta - expectedDelta) > JUMP_WARN_METERS) {
+        console.warn(
+          `[vehicle-motion] jump-detected vehicle_id=${id} route_id=${route.id} prev_distance_along_m=${previous.last_distance_along_m.toFixed(1)} new_distance_along_m=${distance_along_m.toFixed(1)} expected_delta_m=${expectedDelta.toFixed(1)} actual_delta_m=${actualDelta.toFixed(1)}`
+        )
+      }
+
       const pos = pointAlongPolyline(coords, distance_along_m)
 
       out.push({
@@ -157,7 +217,19 @@ export function computeVehicleStates(
     }
   }
 
+  for (const key of vehicleTrackByKey.keys()) {
+    if (!seenKeys.has(key)) {
+      vehicleTrackByKey.delete(key)
+    }
+  }
+
   return out
+}
+
+function forwardDistanceDelta(prev: number, next: number, total: number): number {
+  let delta = next - prev
+  if (delta < 0) delta += total
+  return delta
 }
 
 export function stateServesStop(
