@@ -5,6 +5,7 @@ import {
   normalizeStopCodeForLookup,
   resolveRouteOrderOverrides,
 } from "./route-overrides"
+import { getRouteShapeOverride } from "./route-shape-overrides"
 import {
   buildArrivalsForStop,
   computeVehicleStates,
@@ -193,11 +194,58 @@ export async function loadTransitFromSupabase(
 
     if (orderedStops.length < 2) continue
 
-    const coordinates: [number, number][] = orderedStops.map((s) => [
+    const stopPolyline: [number, number][] = orderedStops.map((s) => [
       s.lat,
       s.lng,
     ])
-    coordinates.push([orderedStops[0].lat, orderedStops[0].lng])
+    stopPolyline.push([orderedStops[0].lat, orderedStops[0].lng])
+
+    // Direction-specific geometry for route 10 demo only.
+    const outboundOverrideShape =
+      r.route_number === "10"
+        ? getRouteShapeOverride({ route_number: r.route_number, direction: "outbound" })
+        : null
+    const inboundOverrideShape =
+      r.route_number === "10"
+        ? getRouteShapeOverride({ route_number: r.route_number, direction: "inbound" })
+        : null
+
+    const coordinates_by_direction: TransitContextDTO["routes"][number]["coordinates_by_direction"] =
+      r.route_number === "10"
+        ? {
+            outbound: outboundOverrideShape ?? stopPolyline,
+            inbound: inboundOverrideShape ?? stopPolyline,
+          }
+        : undefined
+
+    const geometry_source_by_direction:
+      | TransitContextDTO["routes"][number]["geometry_source_by_direction"]
+      | undefined =
+      r.route_number === "10"
+        ? {
+            outbound: outboundOverrideShape ? "shape_override" : "stop_polyline",
+            inbound: inboundOverrideShape ? "shape_override" : "stop_polyline",
+          }
+        : undefined
+
+    const geometry_point_count_by_direction:
+      | TransitContextDTO["routes"][number]["geometry_point_count_by_direction"]
+      | undefined =
+      r.route_number === "10"
+        ? {
+            outbound: (outboundOverrideShape ?? stopPolyline).length,
+            inbound: (inboundOverrideShape ?? stopPolyline).length,
+          }
+        : undefined
+
+    const coordinates: [number, number][] =
+      r.route_number === "10" && outboundOverrideShape
+        ? outboundOverrideShape
+        : stopPolyline
+
+    const geometry_source = r.route_number === "10" && outboundOverrideShape
+      ? "shape_override"
+      : "stop_polyline"
 
     routes.push({
       id: r.id,
@@ -205,6 +253,11 @@ export async function loadTransitFromSupabase(
       route_name: r.route_name,
       color: r.color || "#3b82f6",
       coordinates,
+      geometry_source,
+      geometry_point_count: coordinates.length,
+      coordinates_by_direction,
+      geometry_source_by_direction,
+      geometry_point_count_by_direction,
       stop_ids_ordered: orderedStops.map((s) => s.id),
       order_source: routeDiag?.order_source ?? "db",
       direction: routeDiag?.direction,
@@ -301,6 +354,7 @@ export async function getVehiclesPayload(
       focus_stop_id: params.focus_stop_id ?? null,
       filter_stop_only: params.filter_stop_only ?? false,
       include_debug: params.include_debug ?? false,
+      server_time_ms,
     }
   )
 

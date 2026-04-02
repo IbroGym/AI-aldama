@@ -19,6 +19,21 @@ export interface MapRouteDTO {
   color: string
   /** Polyline vertices [lat, lng] along the route (from ordered stops). */
   coordinates: [number, number][]
+  geometry_source?: "shape_override" | "stop_polyline"
+  geometry_point_count?: number
+  /**
+   * Optional bidirectional geometry for demo/dev rendering + direction-aware simulation.
+   * When present, the UI can choose a direction-specific polyline.
+   */
+  coordinates_by_direction?: Partial<
+    Record<"outbound" | "inbound", [number, number][]>
+  >
+  geometry_source_by_direction?: Partial<
+    Record<"outbound" | "inbound", "shape_override" | "stop_polyline">
+  >
+  geometry_point_count_by_direction?: Partial<
+    Record<"outbound" | "inbound", number>
+  >
   stop_ids_ordered: string[]
   order_source?: "override" | "db"
   direction?: "outbound" | "inbound"
@@ -35,6 +50,10 @@ export interface VehicleDTO {
   lng: number
   heading_deg: number
   speed_kmh: number
+  /** Route 10 phase direction (outbound/inbound) when the two-phase model is active. */
+  direction?: "outbound" | "inbound"
+  terminal_pause_active?: boolean
+  distance_along_m?: number
   /** ETA to the focused stop when `focus_stop_id` was provided and this vehicle serves it. */
   eta_minutes?: number
   eta_confidence_pct?: number

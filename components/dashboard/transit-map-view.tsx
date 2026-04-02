@@ -22,9 +22,12 @@ import {
   TileLayer,
   Tooltip,
   useMap,
+  useMapEvents,
 } from "react-leaflet"
 import L from "leaflet"
 import "leaflet/dist/leaflet.css"
+
+type CapturedPoint = { lat: number; lng: number }
 
 function useSmoothedVehicles(vehicles: VehicleDTO[]): VehicleDTO[] {
   const smooth = useRef(new Map<string, { lat: number; lng: number }>())
@@ -95,6 +98,22 @@ function FitAstana({ center }: { center: [number, number] }) {
   return null
 }
 
+function CaptureEvents({
+  enabled,
+  onCapture,
+}: {
+  enabled: boolean
+  onCapture: (p: CapturedPoint) => void
+}) {
+  useMapEvents({
+    click: (e) => {
+      if (!enabled) return
+      onCapture({ lat: e.latlng.lat, lng: e.latlng.lng })
+    },
+  })
+  return null
+}
+
 export function TransitMapView() {
   const { t } = useI18n()
   const [transit, setTransit] = useState<TransitContextDTO | null>(null)
@@ -110,6 +129,8 @@ export function TransitMapView() {
   const [focusedDirection, setFocusedDirection] = useState<"outbound" | "inbound">(
     "outbound",
   )
+  const [captureMode, setCaptureMode] = useState(false)
+  const [capturedPoints, setCapturedPoints] = useState<CapturedPoint[]>([])
 
   const smoothed = useSmoothedVehicles(vehicles)
 
@@ -260,28 +281,6 @@ export function TransitMapView() {
     return { total, found, missing: total - found }
   }, [route10InboundRows])
 
-  const getRoutePositions = useCallback(
-    (route: TransitContextDTO["routes"][number]): [number, number][] => {
-      if (
-        route.route_number === "10" &&
-        focusedRouteId === route.id &&
-        focusedDirectionDebug
-      ) {
-        const ids =
-          focusedDirection === "outbound"
-            ? focusedDirectionDebug.outbound_stop_ids
-            : focusedDirectionDebug.inbound_stop_ids
-        const directed = ids
-          .map((sid) => stopById.get(sid))
-          .filter((s): s is NonNullable<typeof s> => !!s)
-          .map((s) => [s.lat, s.lng] as [number, number])
-        if (directed.length > 1) return directed
-      }
-      return route.coordinates.map(([lat, lng]) => [lat, lng] as [number, number])
-    },
-    [focusedDirection, focusedDirectionDebug, focusedRouteId, stopById],
-  )
-
   const renderedDirectionStopCount = useMemo(() => {
     if (!focusedDirectionDebug) return 0
     return focusedDirection === "outbound"
@@ -294,6 +293,38 @@ export function TransitMapView() {
       on ? Array.from(new Set([...prev, routeId])) : prev.filter((id) => id !== routeId),
     )
   }
+
+  const fmt = (n: number) => n.toFixed(6)
+  const asArrayString = useMemo(() => {
+    const lines = capturedPoints.map((p) => `  [${fmt(p.lat)}, ${fmt(p.lng)}],`)
+    if (!lines.length) return "[]"
+    lines[lines.length - 1] = lines[lines.length - 1].replace(/,$/, "")
+    return `[\n${lines.join("\n")}\n]`
+  }, [capturedPoints])
+
+  const copyCaptured = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(asArrayString)
+    } catch {
+      // Minimal fallback for environments where clipboard is blocked.
+      const ta = document.createElement("textarea")
+      ta.value = asArrayString
+      document.body.appendChild(ta)
+      ta.select()
+      document.execCommand("copy")
+      document.body.removeChild(ta)
+    }
+  }, [asArrayString])
+
+  const capturePointIcon = useCallback((index0: number) => {
+    const n = index0 + 1
+    return L.divIcon({
+      className: "capture-point-icon",
+      html: `<div style="width:22px;height:22px;border-radius:50%;background:#f97316;border:2px solid #0f172a;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#0f172a;box-shadow:0 2px 6px rgba(0,0,0,.25)">${n}</div>`,
+      iconSize: [22, 22],
+      iconAnchor: [11, 11],
+    })
+  }, [])
 
   return (
     <div className="flex flex-col gap-4 lg:flex-row">
@@ -321,6 +352,16 @@ export function TransitMapView() {
                   }}
                 />
               </div>
+                <div className="flex items-center gap-2 rounded border px-2 py-1">
+                  <Label htmlFor="capture-coordinates" className="text-xs font-normal">
+                    Capture coordinates
+                  </Label>
+                  <Switch
+                    id="capture-coordinates"
+                    checked={captureMode}
+                    onCheckedChange={setCaptureMode}
+                  />
+                </div>
               {focusedRouteId === route10?.id && (
                 <div className="flex items-center gap-1 rounded border px-2 py-1">
                   <Label className="text-xs font-normal">Direction</Label>
@@ -376,20 +417,84 @@ export function TransitMapView() {
               scrollWheelZoom
             >
               <FitAstana center={center} />
+              <CaptureEvents
+                enabled={captureMode}
+                onCapture={(p) =>
+                  setCapturedPoints((prev) => [...prev, p])
+                }
+              />
               <TileLayer
                 attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
               />
-              {visibleRoutes.map((route) => (
-                <Polyline
-                  key={route.id}
-                  positions={getRoutePositions(route)}
-                  pathOptions={{
-                    color: route.color,
-                    ...routeStyle(route.id),
-                  }}
-                />
-              ))}
+              {visibleRoutes.map((route) => {
+                if (
+                  route.route_number === "10" &&
+                  route.coordinates_by_direction
+                ) {
+                  const outbound = route.coordinates_by_direction.outbound ?? route.coordinates
+                  const inbound = route.coordinates_by_direction.inbound ?? route.coordinates
+
+                  if (focusedRouteId === route.id) {
+                    const active =
+                      focusedDirection === "outbound" ? outbound : inbound
+                    return (
+                      <Polyline
+                        key={`${route.id}:${focusedDirection}`}
+                        positions={active.map(
+                          ([lat, lng]) => [lat, lng] as [number, number],
+                        )}
+                        pathOptions={{
+                          color: route.color,
+                          ...routeStyle(route.id),
+                          dashArray:
+                            focusedDirection === "inbound" ? "7 6" : undefined,
+                        }}
+                      />
+                    )
+                  }
+
+                  return (
+                    <>
+                      <Polyline
+                        key={`${route.id}:outbound`}
+                        positions={outbound.map(
+                          ([lat, lng]) => [lat, lng] as [number, number],
+                        )}
+                        pathOptions={{
+                          color: route.color,
+                          ...routeStyle(route.id),
+                        }}
+                      />
+                      <Polyline
+                        key={`${route.id}:inbound`}
+                        positions={inbound.map(
+                          ([lat, lng]) => [lat, lng] as [number, number],
+                        )}
+                        pathOptions={{
+                          color: route.color,
+                          ...routeStyle(route.id),
+                          dashArray: "7 6",
+                          opacity: 0.35,
+                        }}
+                      />
+                    </>
+                  )
+                }
+
+                return (
+                  <Polyline
+                    key={route.id}
+                    positions={route.coordinates.map(
+                      ([lat, lng]) => [lat, lng] as [number, number],
+                    )}
+                    pathOptions={{
+                      color: route.color,
+                      ...routeStyle(route.id),
+                    }}
+                  />
+                )
+              })}
               {transit?.stops.map((stop) => {
                 const selected = stop.id === selectedStopId
                 return (
@@ -405,6 +510,7 @@ export function TransitMapView() {
                     }}
                     eventHandlers={{
                       click: () => {
+                        if (captureMode) return
                         setSelectedStopId(stop.id)
                         setSelectedBus(null)
                       },
@@ -413,12 +519,14 @@ export function TransitMapView() {
                     <Tooltip direction="top" offset={[0, -6]} opacity={1}>
                       {stop.name}
                     </Tooltip>
-                    <Popup>
-                      <div className="text-sm font-medium">{stop.name}</div>
-                      <div className="text-xs text-muted-foreground">
-                        {stop.stop_code}
-                      </div>
-                    </Popup>
+                    {!captureMode && (
+                      <Popup>
+                        <div className="text-sm font-medium">{stop.name}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {stop.stop_code}
+                        </div>
+                      </Popup>
+                    )}
                   </CircleMarker>
                 )
               })}
@@ -428,14 +536,50 @@ export function TransitMapView() {
                   position={[v.lat, v.lng]}
                   icon={busRotatedIcon(v.route_color, v.heading_deg)}
                   eventHandlers={{
-                    click: () => setSelectedBus(v),
+                    click: () => {
+                      if (captureMode) return
+                      setSelectedBus(v)
+                    },
                   }}
                 >
                   <Tooltip direction="top" offset={[0, -10]}>
                     {v.route_number}
+                    {focusedRoute?.route_number === "10" &&
+                      v.route_number === "10" && (
+                        <span className="ml-1 text-[11px] text-muted-foreground">
+                          • {v.direction ?? focusedDirection}
+                          {v.distance_along_m != null
+                            ? ` • ${Math.round(v.distance_along_m)}m`
+                            : ""}
+                          {v.terminal_pause_active ? " (pause)" : ""}
+                        </span>
+                      )}
                   </Tooltip>
                 </Marker>
               ))}
+
+              {capturedPoints.length > 0 && (
+                <>
+                  <Polyline
+                    positions={capturedPoints.map(
+                      (p) => [p.lat, p.lng] as [number, number],
+                    )}
+                    pathOptions={{
+                      color: "#f97316",
+                      weight: 3,
+                      opacity: 0.85,
+                      dashArray: "6 5",
+                    }}
+                  />
+                  {capturedPoints.map((p, i) => (
+                    <Marker
+                      key={`${i}-${p.lat}-${p.lng}`}
+                      position={[p.lat, p.lng]}
+                      icon={capturePointIcon(i)}
+                    />
+                  ))}
+                </>
+              )}
             </MapContainer>
           </div>
         </CardContent>
@@ -446,6 +590,78 @@ export function TransitMapView() {
           <CardTitle className="text-sm">Route debug controls</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3 text-sm">
+          <div className="rounded-md border bg-muted/20 p-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="font-medium">Coordinate capture</div>
+              <div className="text-xs text-muted-foreground">points: {capturedPoints.length}</div>
+            </div>
+            <div className="mt-2 space-y-2">
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  className="rounded border bg-background px-2 py-1 text-xs hover:bg-muted disabled:opacity-50"
+                  disabled={capturedPoints.length === 0}
+                  onClick={() =>
+                    setCapturedPoints((prev) =>
+                      prev.slice(0, Math.max(0, prev.length - 1)),
+                    )
+                  }
+                >
+                  Undo last point
+                </button>
+                <button
+                  type="button"
+                  className="rounded border bg-background px-2 py-1 text-xs hover:bg-muted disabled:opacity-50"
+                  disabled={capturedPoints.length === 0}
+                  onClick={() => setCapturedPoints([])}
+                >
+                  Clear all
+                </button>
+                <button
+                  type="button"
+                  className="rounded border bg-background px-2 py-1 text-xs hover:bg-muted disabled:opacity-50"
+                  disabled={capturedPoints.length === 0}
+                  onClick={() => void copyCaptured()}
+                  title="Copies as JavaScript array of [lat, lng] tuples"
+                >
+                  Copy as array
+                </button>
+              </div>
+
+              <div className="max-h-52 overflow-auto rounded border">
+                <table className="w-full text-[11px]">
+                  <thead className="sticky top-0 bg-muted">
+                    <tr>
+                      <th className="px-2 py-1 text-left">#</th>
+                      <th className="px-2 py-1 text-left">[lat, lng]</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {capturedPoints.map((p, i) => (
+                      <tr key={`${i}-${p.lat}-${p.lng}`} className="border-t">
+                        <td className="px-2 py-1 font-mono">{i + 1}</td>
+                        <td className="px-2 py-1 font-mono text-muted-foreground">
+                          [{fmt(p.lat)}, {fmt(p.lng)}]
+                        </td>
+                      </tr>
+                    ))}
+                    {capturedPoints.length === 0 && (
+                      <tr>
+                        <td className="px-2 py-2 text-muted-foreground" colSpan={2}>
+                          Enable “Capture coordinates”, then click on the map.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {capturedPoints.length > 0 && (
+                <div className="text-[11px] text-muted-foreground">{asArrayString}</div>
+              )}
+            </div>
+          </div>
+
           <div className="space-y-2">
             {(transit?.routes ?? []).map((route) => {
               const enabled = enabledRouteIds.includes(route.id)
@@ -472,6 +688,26 @@ export function TransitMapView() {
               <div className="font-medium">Route 10 diagnostics</div>
               <div className="mt-1">
                 order source: {focusedOrderDiag?.order_source ?? focusedRoute.order_source ?? "db"}
+              </div>
+              <div>
+                geometry source:{" "}
+                {(
+                  focusedDirection === "outbound"
+                    ? focusedRoute.geometry_source_by_direction?.outbound
+                    : focusedRoute.geometry_source_by_direction?.inbound
+                ) ??
+                  focusedRoute.geometry_source ??
+                  "stop_polyline"}
+              </div>
+              <div>
+                geometry points:{" "}
+                {(
+                  focusedDirection === "outbound"
+                    ? focusedRoute.geometry_point_count_by_direction?.outbound
+                    : focusedRoute.geometry_point_count_by_direction?.inbound
+                ) ??
+                  focusedRoute.geometry_point_count ??
+                  focusedRoute.coordinates.length}
               </div>
               <div>rendered direction: {focusedDirection}</div>
               <div>rendered stop count: {renderedDirectionStopCount}</div>
