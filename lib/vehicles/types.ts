@@ -144,6 +144,8 @@ export interface EtaResponsePayload {
   stop_id: string
   arrivals: EtaArrivalDTO[]
   server_time_ms: number
+  sim_time_ms?: number
+  simulation_speed_multiplier?: number
   data_source: "simulated" | "gtfs_rt" | "database"
   transit_data_source: "supabase" | "mock"
 }

@@ -11,6 +11,7 @@ import {
   computeVehicleStates,
   type DbBusLite,
 } from "./engine"
+import { getSimulationClockSnapshot } from "./sim-clock"
 import { vehiclesDtoFromStates } from "./simulation"
 import type { EtaResponsePayload, TransitContextDTO, VehicleDTO } from "./types"
 
@@ -322,9 +323,19 @@ export async function getTransitContext(
 export async function getSimulationSnapshot(supabase: SupabaseClient | null) {
   const transit = await getTransitContext(supabase)
   const dbBuses = supabase ? await loadDbBuses(supabase) : []
-  const server_time_ms = Date.now()
-  const states = computeVehicleStates(transit, server_time_ms, dbBuses)
-  return { transit, states, server_time_ms }
+  const clock = getSimulationClockSnapshot()
+  const server_time_ms = clock.real_now_ms
+  const sim_time_ms = clock.sim_now_ms
+  console.info(
+    `[sim-speed] snapshot multiplier=${clock.simulation_speed_multiplier} real_now_ms=${server_time_ms} sim_now_ms=${Math.round(sim_time_ms)}`,
+  )
+  const states = computeVehicleStates(
+    transit,
+    server_time_ms,
+    dbBuses,
+    clock.simulation_speed_multiplier
+  )
+  return { transit, states, server_time_ms, sim_time_ms, simulation_speed_multiplier: clock.simulation_speed_multiplier }
 }
 
 export interface VehiclesResponsePayload {
@@ -334,6 +345,8 @@ export interface VehiclesResponsePayload {
   filter_stop_only: boolean
   vehicle_data_source: "simulated" | "gtfs_rt" | "database"
   server_time_ms: number
+  sim_time_ms: number
+  simulation_speed_multiplier: number
 }
 
 export async function getVehiclesPayload(
@@ -344,7 +357,7 @@ export async function getVehiclesPayload(
     include_debug?: boolean
   }
 ): Promise<VehiclesResponsePayload> {
-  const { transit, states, server_time_ms } = await getSimulationSnapshot(
+  const { transit, states, server_time_ms, sim_time_ms, simulation_speed_multiplier } = await getSimulationSnapshot(
     supabase
   )
   const { vehicles, highlighted_route_ids } = vehiclesDtoFromStates(
@@ -365,15 +378,18 @@ export async function getVehiclesPayload(
     filter_stop_only: params.filter_stop_only ?? false,
     vehicle_data_source: "simulated",
     server_time_ms,
+    sim_time_ms,
+    simulation_speed_multiplier,
   }
 }
 
 export async function getEtaPayload(
   supabase: SupabaseClient | null,
   stopId: string,
-  includeDebug = false
+  includeDebug = false,
+  enableTraceLogs = false
 ): Promise<EtaResponsePayload> {
-  const { transit, states, server_time_ms } = await getSimulationSnapshot(
+  const { transit, states, server_time_ms, sim_time_ms, simulation_speed_multiplier } = await getSimulationSnapshot(
     supabase
   )
   const stopById = new Map(transit.stops.map((s) => [s.id, s]))
@@ -383,13 +399,16 @@ export async function getEtaPayload(
     stopId,
     stopById,
     server_time_ms,
-    includeDebug
+    includeDebug,
+    enableTraceLogs
   )
 
   return {
     stop_id: stopId,
     arrivals,
     server_time_ms,
+    sim_time_ms,
+    simulation_speed_multiplier,
     data_source: "simulated",
     transit_data_source: transit.data_source,
   }

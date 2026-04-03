@@ -11,6 +11,11 @@ import {
   pointAlongPolyline,
   type LatLng,
 } from "./geo"
+import {
+  isRoute10NazarbaevDemoStopId,
+  isRoute10NuInboundSideStopId,
+  isRoute10NuOutboundSideStopId,
+} from "./route10-nu-demo-stops"
 import type {
   EtaArrivalDTO,
   MapRouteDTO,
@@ -66,7 +71,12 @@ export function routesServingStop(
   routes: MapRouteDTO[],
   stopId: string
 ): MapRouteDTO[] {
-  return routes.filter((r) => r.stop_ids_ordered.includes(stopId))
+  return routes.filter((r) => {
+    if (r.route_number === "10" && isRoute10NazarbaevDemoStopId(stopId)) {
+      return true
+    }
+    return r.stop_ids_ordered.includes(stopId)
+  })
 }
 
 /** Base speed (m/s) from vehicle id — stable per bus. */
@@ -208,7 +218,8 @@ function pointAlongOpenPolyline(
 export function computeVehicleStates(
   transit: TransitContextDTO,
   nowMs: number,
-  dbBuses: DbBusLite[]
+  dbBuses: DbBusLite[],
+  simulationSpeedMultiplier = 1,
 ): VehicleRuntimeState[] {
   const busesByRoute = new Map<string, DbBusLite[]>()
   for (const b of dbBuses) {
@@ -262,7 +273,7 @@ export function computeVehicleStates(
 
         if (!previous) {
           const phaseOffset_s = ((seed % 10_000) / 10_000) * cycle_s
-          const t = ((nowMs / 1000 + phaseOffset_s) % cycle_s) as number
+            const t = (((nowMs / 1000) * simulationSpeedMultiplier + phaseOffset_s) % cycle_s) as number
 
           if (t < outTravel_s) {
             direction = "outbound"
@@ -320,20 +331,22 @@ export function computeVehicleStates(
               terminal_pause_until_ms,
             })
           } else {
-            const speed_mps = effectiveSpeedMps(id, nowMs)
-            const dt_s = Math.max(
+            const base_speed_mps = effectiveSpeedMps(id, nowMs)
+            const dt_real_s = Math.max(
               0,
               Math.min(
                 MAX_INTEGRATION_DT_S,
                 (nowMs - previous.last_now_ms) / 1000,
               ),
             )
+            const dt_s = dt_real_s * simulationSpeedMultiplier
             const totalLen = direction === "outbound" ? outTotalLen : inTotalLen
-            const rawDistance = previous.last_distance_along_m + speed_mps * dt_s
+            const rawDistance = previous.last_distance_along_m + base_speed_mps * dt_s
             distance_along_m = Math.max(0, Math.min(totalLen, rawDistance))
 
             if (distance_along_m >= totalLen) {
-              terminal_pause_until_ms = nowMs + ROUTE10_TERMINAL_DWELL_MS
+              terminal_pause_until_ms =
+                nowMs + ROUTE10_TERMINAL_DWELL_MS / simulationSpeedMultiplier
               distance_along_m = totalLen
             }
 
@@ -347,7 +360,9 @@ export function computeVehicleStates(
         }
 
         const pausedNow = terminal_pause_until_ms != null && nowMs < terminal_pause_until_ms
-        const speed_mps = pausedNow ? 0 : effectiveSpeedMps(id, nowMs)
+        const speed_mps = pausedNow
+          ? 0
+          : effectiveSpeedMps(id, nowMs) * simulationSpeedMultiplier
 
         const activeCoords = direction === "outbound" ? outboundCoords : inboundCoords
         const totalLen = direction === "outbound" ? outTotalLen : inTotalLen
@@ -394,19 +409,25 @@ export function computeVehicleStates(
     for (const id of unitIds) {
       const trackKey = `${route.id}::${id}`
       seenKeys.add(trackKey)
-      const speed_mps = effectiveSpeedMps(id, nowMs)
+      const speed_mps = effectiveSpeedMps(id, nowMs) * simulationSpeedMultiplier
+      const base_speed_mps = speed_mps / simulationSpeedMultiplier
       const previous = vehicleTrackByKey.get(trackKey)
-      const seededDistance = distanceAlongAtTime(totalLen, id, nowMs)
+      const seededDistance = distanceAlongAtTime(
+        totalLen,
+        id,
+        nowMs * simulationSpeedMultiplier,
+      )
       let distance_along_m = seededDistance
       let previousDistance = seededDistance
 
       if (previous) {
         previousDistance = previous.last_distance_along_m
-        const dt_s = Math.max(
+        const dt_real_s = Math.max(
           0,
           Math.min(MAX_INTEGRATION_DT_S, (nowMs - previous.last_now_ms) / 1000)
         )
-        const rawDistance = previous.last_distance_along_m + speed_mps * dt_s
+        const dt_s = dt_real_s * simulationSpeedMultiplier
+        const rawDistance = previous.last_distance_along_m + base_speed_mps * dt_s
         distance_along_m = rawDistance % totalLen
         if (distance_along_m < 0) distance_along_m += totalLen
       }
@@ -418,10 +439,11 @@ export function computeVehicleStates(
 
       const expectedDelta =
         previous != null
-          ? speed_mps *
+          ? base_speed_mps *
             Math.max(
               0,
-              Math.min(MAX_INTEGRATION_DT_S, (nowMs - previous.last_now_ms) / 1000)
+              Math.min(MAX_INTEGRATION_DT_S, (nowMs - previous.last_now_ms) / 1000) *
+                simulationSpeedMultiplier
             )
           : 0
       const actualDelta =
@@ -488,6 +510,13 @@ export function stateServesStop(
     return route.stop_ids_ordered.includes(stopId)
   }
 
+  if (isRoute10NuInboundSideStopId(stopId)) {
+    return (state.direction ?? "outbound") === "inbound"
+  }
+  if (isRoute10NuOutboundSideStopId(stopId)) {
+    return (state.direction ?? "outbound") === "outbound"
+  }
+
   const dbg = transit.route_direction_debug?.find(
     (d) => d.route_id === state.route_id,
   )
@@ -504,7 +533,8 @@ export function buildArrivalsForStop(
   stopId: string,
   stopById: Map<string, MapStopDTO>,
   serverTimeMs: number,
-  includeDebug = false
+  includeDebug = false,
+  enableTraceLogs = false
 ): EtaArrivalDTO[] {
   const stop = stopById.get(stopId)
   if (!stop) return []
@@ -512,15 +542,38 @@ export function buildArrivalsForStop(
   const routeById = new Map(transit.routes.map((r) => [r.id, r]))
   const arrivals: EtaArrivalDTO[] = []
 
+  const trace = (message: string) => {
+    if (!enableTraceLogs) return
+    console.info(`[eta-trace] stop_id=${stopId} ${message}`)
+  }
+
+  trace(`candidates_total=${states.length}`)
+
   for (const state of states) {
     const route = routeById.get(state.route_id)
-    if (!route || !stateServesStop(transit, state, route, stopId)) continue
+    if (!route) {
+      trace(`vehicle_id=${state.id} excluded=missing_route route_id=${state.route_id}`)
+      continue
+    }
+
+    const servesStop = stateServesStop(transit, state, route, stopId)
+    if (!servesStop) {
+      trace(
+        `vehicle_id=${state.id} route_id=${state.route_id} route_number=${state.route_number} direction=${state.direction ?? "n/a"} distance_along_m=${Math.round(state.distance_along_m)} excluded=missing_stop_match`,
+      )
+      continue
+    }
 
     if (route.route_number === "10") {
       const paused =
         state.terminal_pause_until_ms != null &&
         serverTimeMs < state.terminal_pause_until_ms
-      if (paused) continue
+      if (paused) {
+        trace(
+          `vehicle_id=${state.id} route_id=${state.route_id} route_number=10 direction=${state.direction ?? "n/a"} distance_along_m=${Math.round(state.distance_along_m)} excluded=terminal_dwell`,
+        )
+        continue
+      }
     }
 
     const eta =
@@ -544,13 +597,31 @@ export function buildArrivalsForStop(
       // showing "next full loop ETA" as the immediate arrival.
       const likelyJustPassed =
         eta.forward_m > state.route_total_m * 0.85 && eta.lateral_m < 45
-      if (likelyJustPassed) continue
+      if (likelyJustPassed) {
+        trace(
+          `vehicle_id=${state.id} route_id=${state.route_id} route_number=${state.route_number} direction=${state.direction ?? "n/a"} distance_along_m=${Math.round(state.distance_along_m)} excluded=no_wrap_filter forward_m=${Math.round(eta.forward_m)} lateral_m=${Math.round(eta.lateral_m)}`,
+        )
+        continue
+      }
+    } else if (!Number.isFinite(eta.forward_m)) {
+      trace(
+        `vehicle_id=${state.id} route_id=${state.route_id} route_number=10 direction=${state.direction ?? "n/a"} distance_along_m=${Math.round(state.distance_along_m)} excluded=stop_behind_vehicle`,
+      )
+      continue
     }
 
     // Kiosk/display horizon: hide very far next-loop arrivals.
-    if (eta.eta_minutes > 35) continue
+    if (eta.eta_minutes > 35) {
+      trace(
+        `vehicle_id=${state.id} route_id=${state.route_id} route_number=${state.route_number} direction=${state.direction ?? "n/a"} distance_along_m=${Math.round(state.distance_along_m)} excluded=too_far_horizon eta_minutes=${eta.eta_minutes}`,
+      )
+      continue
+    }
 
     const predicted = new Date(serverTimeMs + eta.eta_minutes * 60_000)
+    trace(
+      `vehicle_id=${state.id} route_id=${state.route_id} route_number=${state.route_number} direction=${state.direction ?? "n/a"} distance_along_m=${Math.round(state.distance_along_m)} included eta_minutes=${eta.eta_minutes} confidence_pct=${eta.confidence_pct}`,
+    )
 
     arrivals.push({
       vehicle_id: state.id,
@@ -575,6 +646,7 @@ export function buildArrivalsForStop(
   }
 
   arrivals.sort((a, b) => a.eta_minutes - b.eta_minutes)
+  trace(`arrivals_total=${arrivals.length}`)
   return arrivals
 }
 

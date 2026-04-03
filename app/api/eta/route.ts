@@ -12,6 +12,7 @@ export async function GET(req: NextRequest) {
   const searchParams = new URL(req.url).searchParams
   const stopId = searchParams.get("stop_id")
   const debug = searchParams.get("debug") === "1"
+  const trace = searchParams.get("trace") === "1"
   if (!stopId) {
     return NextResponse.json(
       { error: "stop_id is required" },
@@ -19,7 +20,17 @@ export async function GET(req: NextRequest) {
     )
   }
 
+  if (process.env.NODE_ENV === "development") {
+    console.info("[api/eta] stop_id from query (expect public.bus_stops.id)", {
+      stop_id: stopId,
+    })
+  }
+
   const supabase = await createClientOrNull()
-  const payload = await getEtaPayload(supabase, stopId, debug)
+  const enableTraceLogs = process.env.NODE_ENV === "development" && (trace || debug)
+  const payload = await getEtaPayload(supabase, stopId, debug, enableTraceLogs)
+  console.info(
+    `[sim-speed] /api/eta multiplier=${payload.simulation_speed_multiplier ?? 1}`,
+  )
   return NextResponse.json(payload)
 }

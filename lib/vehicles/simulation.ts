@@ -2,6 +2,7 @@ import {
   etaMinutesAndConfidence,
   etaMinutesAndConfidenceNoWrap,
   routesServingStop,
+  stateServesStop,
   type VehicleRuntimeState,
 } from "./engine"
 import type { MapStopDTO, TransitContextDTO, VehicleDTO } from "./types"
@@ -44,19 +45,10 @@ export function vehiclesDtoFromStates(
 
   const vehicles: VehicleDTO[] = filtered.map((state) => {
     const route = transit.routes.find((r) => r.id === state.route_id)
-    const servesFocus = (() => {
-      if (!focusStop || !route) return false
-      if (route.route_number !== "10") {
-        return route.stop_ids_ordered.includes(focusStopId!)
-      }
-
-      const dir = state.direction ?? "outbound"
-      const dbg = transit.route_direction_debug?.find(
-        (d) => d.route_id === state.route_id,
-      )
-      const ids = dir === "outbound" ? dbg?.outbound_stop_ids : dbg?.inbound_stop_ids
-      return ids?.includes(focusStopId!) ?? false
-    })()
+    const servesFocus =
+      !!focusStop &&
+      !!route &&
+      stateServesStop(transit, state, route, focusStopId!)
 
     let eta_minutes: number | undefined
     let eta_confidence_pct: number | undefined

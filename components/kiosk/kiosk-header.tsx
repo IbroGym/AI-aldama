@@ -6,10 +6,20 @@ import { useI18n } from "@/components/i18n-provider"
 interface KioskHeaderProps {
   stopName: string
   currentTime: Date
+  /** public.bus_stops.id — same value sent to /api/eta and /api/vehicles */
+  stopIdForApi?: string
+  /** public.bus_stops.stop_code (often GTFS stop_id); not the API parameter */
   stopCode?: string
+  showDevStopIds?: boolean
 }
 
-export function KioskHeader({ stopName, currentTime, stopCode }: KioskHeaderProps) {
+export function KioskHeader({
+  stopName,
+  currentTime,
+  stopIdForApi,
+  stopCode,
+  showDevStopIds,
+}: KioskHeaderProps) {
   const { locale } = useI18n()
   const localeTag = locale === "kk" ? "kk-KZ" : locale === "ru" ? "ru-RU" : "en-US"
   const kkWeekdaysMondayFirst = [
@@ -79,8 +89,16 @@ export function KioskHeader({ stopName, currentTime, stopCode }: KioskHeaderProp
             <MapPin className="h-5 w-5 text-blue-500" />
             <div>
               <div className="font-semibold text-slate-900">{stopName}</div>
+              {showDevStopIds && stopIdForApi && (
+                <div className="text-[11px] font-mono text-slate-700">
+                  API stop_id: {stopIdForApi}
+                </div>
+              )}
               {stopCode && (
-                <div className="text-xs text-slate-500">Stop #{stopCode}</div>
+                <div className="text-xs text-slate-500">
+                  {showDevStopIds ? "stop_code (ref): " : "Ref: "}
+                  {stopCode}
+                </div>
               )}
             </div>
           </div>

@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import type { TransitContextDTO, VehicleDTO } from "@/lib/vehicles/types"
 import {
+  Fragment,
   useCallback,
   useEffect,
   useMemo,
@@ -116,6 +117,7 @@ function CaptureEvents({
 
 export function TransitMapView() {
   const { t } = useI18n()
+  const isDev = process.env.NODE_ENV === "development"
   const [transit, setTransit] = useState<TransitContextDTO | null>(null)
   const [vehicles, setVehicles] = useState<VehicleDTO[]>([])
   const [highlightedIds, setHighlightedIds] = useState<string[]>([])
@@ -129,6 +131,10 @@ export function TransitMapView() {
   const [focusedDirection, setFocusedDirection] = useState<"outbound" | "inbound">(
     "outbound",
   )
+  const [simSpeed, setSimSpeed] = useState<number>(1)
+  const pendingSimSpeedRef = useRef<number | null>(null)
+  const [updatingSimSpeed, setUpdatingSimSpeed] = useState(false)
+  const [simSpeedError, setSimSpeedError] = useState<string | null>(null)
   const [captureMode, setCaptureMode] = useState(false)
   const [capturedPoints, setCapturedPoints] = useState<CapturedPoint[]>([])
 
@@ -171,17 +177,87 @@ export function TransitMapView() {
       const data = (await res.json()) as {
         vehicles: VehicleDTO[]
         highlighted_route_ids: string[]
+        simulation_speed_multiplier?: number
       }
       setVehicles(data.vehicles)
       setHighlightedIds(data.highlighted_route_ids ?? [])
+      if (typeof data.simulation_speed_multiplier === "number") {
+        const pending = pendingSimSpeedRef.current
+        if (pending == null || pending === data.simulation_speed_multiplier) {
+          pendingSimSpeedRef.current = null
+          setSimSpeed(data.simulation_speed_multiplier)
+        }
+      }
     } catch {
       /* keep last snapshot */
     }
   }, [selectedStopId, onlyMyStop])
 
+  const setSimulationSpeed = useCallback(
+    async (nextMultiplier: number) => {
+      if (!isDev) return
+      setSimSpeedError(null)
+      const previous = simSpeed
+      pendingSimSpeedRef.current = nextMultiplier
+      setSimSpeed(nextMultiplier)
+      setUpdatingSimSpeed(true)
+      try {
+        const res = await fetch("/api/dev/simulation-speed", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ multiplier: nextMultiplier }),
+        })
+        if (!res.ok) {
+          const text = await res.text()
+          throw new Error(text || `HTTP ${res.status}`)
+        }
+        const data = (await res.json()) as {
+          simulation_speed_multiplier?: number
+          error?: string
+        }
+        if (typeof data.simulation_speed_multiplier === "number") {
+          setSimSpeed(data.simulation_speed_multiplier)
+          pendingSimSpeedRef.current = null
+        } else {
+          throw new Error(data.error || "Backend did not return simulation speed")
+        }
+        void fetchVehicles()
+      } catch (error) {
+        pendingSimSpeedRef.current = null
+        setSimSpeed(previous)
+        setSimSpeedError(
+          error instanceof Error
+            ? `Failed to set simulation speed: ${error.message}`
+            : "Failed to set simulation speed",
+        )
+      } finally {
+        setUpdatingSimSpeed(false)
+      }
+    },
+    [fetchVehicles, isDev, simSpeed],
+  )
+
   useEffect(() => {
     void fetchTransit()
   }, [fetchTransit])
+
+  useEffect(() => {
+    if (!isDev) return
+    const run = async () => {
+      try {
+        const res = await fetch("/api/dev/simulation-speed")
+        if (!res.ok) return
+        const data = (await res.json()) as { simulation_speed_multiplier?: number }
+        if (typeof data.simulation_speed_multiplier === "number") {
+          if (pendingSimSpeedRef.current != null) return
+          setSimSpeed(data.simulation_speed_multiplier)
+        }
+      } catch {
+        /* dev control unavailable */
+      }
+    }
+    void run()
+  }, [isDev])
 
   useEffect(() => {
     if (!transit) return
@@ -336,9 +412,35 @@ export function TransitMapView() {
               <p className="text-xs text-muted-foreground">
                 {sourceNote}
                 {loadError ? ` · ${loadError}` : ""}
+                {isDev ? ` · sim speed ${simSpeed}x` : ""}
+                {isDev && simSpeedError ? ` · ${simSpeedError}` : ""}
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-4">
+              {isDev && (
+                <div className="flex items-center gap-2 rounded border px-2 py-1">
+                  <Label htmlFor="sim-speed" className="text-xs font-normal">
+                    Sim speed
+                  </Label>
+                  <select
+                    id="sim-speed"
+                    className="rounded border bg-background px-2 py-1 text-xs"
+                    value={String(simSpeed)}
+                    disabled={updatingSimSpeed}
+                    onChange={(e) => {
+                      const next = Number(e.target.value)
+                      if (!Number.isFinite(next)) return
+                      void setSimulationSpeed(next)
+                    }}
+                  >
+                    {[1, 5, 10, 20].map((m) => (
+                      <option key={`sim-${m}`} value={String(m)}>
+                        {m}x
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
               <div className="flex items-center gap-2 rounded border px-2 py-1">
                 <Label className="text-xs font-normal">Focus route 10</Label>
                 <Switch
@@ -455,7 +557,7 @@ export function TransitMapView() {
                   }
 
                   return (
-                    <>
+                    <Fragment key={`${route.id}:outbound+inbound`}>
                       <Polyline
                         key={`${route.id}:outbound`}
                         positions={outbound.map(
@@ -478,7 +580,7 @@ export function TransitMapView() {
                           opacity: 0.35,
                         }}
                       />
-                    </>
+                    </Fragment>
                   )
                 }
 
