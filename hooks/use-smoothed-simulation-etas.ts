@@ -8,8 +8,35 @@ export type SmoothedEtaArrival = EtaArrivalDTO & {
   predicted_arrival: string
 }
 
+function pruneMapsToRawVehicleIds(
+  rawIds: Set<string>,
+  targets: Map<string, number>,
+  smoothed: Map<string, number>,
+  holdUntilMs: Map<string, number>,
+  prevRawEta: Map<string, number>,
+): string[] {
+  const removed: string[] = []
+  const allKeys = new Set<string>([
+    ...targets.keys(),
+    ...smoothed.keys(),
+    ...holdUntilMs.keys(),
+    ...prevRawEta.keys(),
+  ])
+  for (const id of allKeys) {
+    if (!rawIds.has(id)) {
+      removed.push(id)
+      targets.delete(id)
+      smoothed.delete(id)
+      holdUntilMs.delete(id)
+      prevRawEta.delete(id)
+    }
+  }
+  return removed
+}
+
 /**
  * Lerps displayed ETA minutes toward server targets between polls (no jumps).
+ * Smoothed state is keyed only by vehicle_id and is pruned whenever raw does not contain that id.
  */
 export function useSmoothedSimulationArrivals(
   raw: EtaArrivalDTO[] | null,
@@ -19,18 +46,30 @@ export function useSmoothedSimulationArrivals(
   const smoothed = useRef(new Map<string, number>())
   const holdUntilMs = useRef(new Map<string, number>())
   const prevRawEta = useRef(new Map<string, number>())
+  const lastDevLogRawSig = useRef<string>("")
   const [version, setVersion] = useState(0)
 
   useEffect(() => {
-    if (!enabled || !raw?.length) {
-      if (!raw?.length) {
-        targets.current.clear()
-        smoothed.current.clear()
-        holdUntilMs.current.clear()
-        prevRawEta.current.clear()
-      }
+    if (!enabled) return
+
+    if (!raw?.length) {
+      targets.current.clear()
+      smoothed.current.clear()
+      holdUntilMs.current.clear()
+      prevRawEta.current.clear()
+      setVersion((v) => v + 1)
       return
     }
+
+    const rawIds = new Set(raw.map((a) => a.vehicle_id))
+    pruneMapsToRawVehicleIds(
+      rawIds,
+      targets.current,
+      smoothed.current,
+      holdUntilMs.current,
+      prevRawEta.current,
+    )
+
     const now = Date.now()
     for (const a of raw) {
       const prev = prevRawEta.current.get(a.vehicle_id)
@@ -43,14 +82,6 @@ export function useSmoothedSimulationArrivals(
       targets.current.set(a.vehicle_id, a.eta_minutes)
       if (!smoothed.current.has(a.vehicle_id)) {
         smoothed.current.set(a.vehicle_id, a.eta_minutes)
-      }
-    }
-    for (const id of [...smoothed.current.keys()]) {
-      if (!raw.find((x) => x.vehicle_id === id)) {
-        smoothed.current.delete(id)
-        targets.current.delete(id)
-        prevRawEta.current.delete(id)
-        holdUntilMs.current.delete(id)
       }
     }
   }, [raw, enabled])
@@ -80,21 +111,50 @@ export function useSmoothedSimulationArrivals(
 
   return useMemo(() => {
     if (!raw || !enabled) return []
+
+    const rawIds = new Set(raw.map((a) => a.vehicle_id))
+    const removed = pruneMapsToRawVehicleIds(
+      rawIds,
+      targets.current,
+      smoothed.current,
+      holdUntilMs.current,
+      prevRawEta.current,
+    )
+
+    const seen = new Set<string>()
+    const dedupedRaw = raw.filter((a) => {
+      if (seen.has(a.vehicle_id)) return false
+      seen.add(a.vehicle_id)
+      return true
+    })
+
+    if (process.env.NODE_ENV === "development") {
+      const sig = dedupedRaw.map((a) => a.vehicle_id).join("|")
+      if (removed.length > 0 || sig !== lastDevLogRawSig.current) {
+        lastDevLogRawSig.current = sig
+        console.info("[smoothed-eta]", {
+          raw_vehicle_ids: dedupedRaw.map((a) => a.vehicle_id),
+          smoothed_vehicle_ids: [...smoothed.current.keys()],
+          removed_vehicle_ids: removed,
+        })
+      }
+    }
+
     const now = Date.now()
-    return raw
+    return dedupedRaw
       .filter((a) => {
         const hold = holdUntilMs.current.get(a.vehicle_id) ?? 0
         return hold <= now
       })
       .map((a) => {
-      const mins = smoothed.current.get(a.vehicle_id) ?? a.eta_minutes
-      const predicted_arrival = new Date(
-        Date.now() + mins * 60_000
-      ).toISOString()
-      return {
-        ...a,
-        predicted_arrival,
-      }
-    })
+        const mins = smoothed.current.get(a.vehicle_id) ?? a.eta_minutes
+        const predicted_arrival = new Date(
+          Date.now() + mins * 60_000
+        ).toISOString()
+        return {
+          ...a,
+          predicted_arrival,
+        }
+      })
   }, [raw, enabled, version])
 }

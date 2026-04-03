@@ -15,9 +15,15 @@ interface KioskStopSelectorProps {
   stops: BusStop[]
   selectedStopId?: string
   onSelect: (stopId: string) => void
+  showDevStopIds?: boolean
 }
 
-export function KioskStopSelector({ stops, selectedStopId, onSelect }: KioskStopSelectorProps) {
+export function KioskStopSelector({
+  stops,
+  selectedStopId,
+  onSelect,
+  showDevStopIds,
+}: KioskStopSelectorProps) {
   const { t } = useI18n()
   // Group stops by zone
   const stopsByZone = stops.reduce((acc, stop) => {
@@ -50,9 +56,18 @@ export function KioskStopSelector({ stops, selectedStopId, onSelect }: KioskStop
                   value={stop.id}
                   className="cursor-pointer text-slate-900 focus:bg-slate-100 focus:text-slate-900"
                 >
-                  <div className="flex items-center gap-2">
-                    <span>{stop.name}</span>
-                    <span className="text-xs text-slate-400">#{stop.stop_code}</span>
+                  <div className="flex flex-col gap-0.5 text-left">
+                    <div className="flex items-center gap-2">
+                      <span>{stop.name}</span>
+                      <span className="text-xs text-slate-400">
+                        code {stop.stop_code}
+                      </span>
+                    </div>
+                    {showDevStopIds && (
+                      <span className="text-[10px] font-mono text-slate-500">
+                        id {stop.id}
+                      </span>
+                    )}
                   </div>
                 </SelectItem>
               ))}

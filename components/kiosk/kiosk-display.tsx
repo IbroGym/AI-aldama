@@ -17,6 +17,7 @@ import {
   useSmoothedSimulationArrivals,
   type SmoothedEtaArrival,
 } from "@/hooks/use-smoothed-simulation-etas"
+import { ROUTE_10_NU_INBOUND_SIDE_BUS_STOP_ID } from "@/lib/vehicles/route10-nu-demo-stops"
 
 interface KioskDisplayProps {
   stops: BusStop[]
@@ -32,14 +33,23 @@ interface EtaWithDetails extends EtaPrediction {
 const ROUTES_TO_SHOW = new Set(["10", "12"])
 const DEFAULT_ROUTE_NUMBERS = Array.from(ROUTES_TO_SHOW)
 
-const STOP_ROUTE_OVERRIDES: Record<string, string[]> = {
+const STOP_ROUTE_OVERRIDES_BY_CODE: Record<string, string[]> = {
   "ccd5e97f-c483-4209-96d7-8d64466fdc26": ["10"],
   "12cabd75-d75d-4b82-8364-770c7812d47f": ["10"],
 }
 
+const STOP_ROUTE_OVERRIDES_BY_ID: Record<string, string[]> = {
+  [ROUTE_10_NU_INBOUND_SIDE_BUS_STOP_ID]: ["10"],
+}
+
 function getAllowedRouteNumbers(stop?: BusStop): string[] {
+  if (stop?.id && STOP_ROUTE_OVERRIDES_BY_ID[stop.id]) {
+    return STOP_ROUTE_OVERRIDES_BY_ID[stop.id]
+  }
   const stopCode = stop?.stop_code
-  if (stopCode && STOP_ROUTE_OVERRIDES[stopCode]) return STOP_ROUTE_OVERRIDES[stopCode]
+  if (stopCode && STOP_ROUTE_OVERRIDES_BY_CODE[stopCode]) {
+    return STOP_ROUTE_OVERRIDES_BY_CODE[stopCode]
+  }
 
   const normalizedName = (stop?.name || "").toLowerCase()
   if (
@@ -82,7 +92,49 @@ function toKioskEta(
 
 export function KioskDisplay({ stops, defaultStopId, alerts }: KioskDisplayProps) {
   const { t, locale } = useI18n()
-  const [selectedStopId, setSelectedStopId] = useState(defaultStopId || stops[0]?.id)
+  const isDev = process.env.NODE_ENV === "development"
+  const [selectedStopId, setSelectedStopId] = useState(
+    () => defaultStopId || stops[0]?.id,
+  )
+
+  useEffect(() => {
+    if (!isDev) return
+    const row = stops.find((s) => s.id === selectedStopId)
+    console.info("[kiosk] selected stop (API uses bus_stops.id only)", {
+      selectedStopId,
+      selectedStopCode: row?.stop_code,
+      inboundNuBusStopId: ROUTE_10_NU_INBOUND_SIDE_BUS_STOP_ID,
+    })
+  }, [isDev, selectedStopId, stops])
+
+  useEffect(() => {
+    if (!isDev) return
+    const row = stops.find((s) => s.id === (defaultStopId || stops[0]?.id))
+    console.info("[kiosk] init from server props", {
+      defaultStopIdProp: defaultStopId,
+      resolvedInitialId: defaultStopId || stops[0]?.id,
+      row: row
+        ? { id: row.id, stop_code: row.stop_code, name: row.name }
+        : null,
+    })
+  }, [isDev, defaultStopId, stops])
+
+  useEffect(() => {
+    if (!isDev || !defaultStopId) return
+    if (!stops.some((s) => s.id === defaultStopId)) {
+      console.warn(
+        "[kiosk] defaultStopId not in stops list — Radix Select may not show a value",
+        { defaultStopId, stopIdsInList: stops.map((s) => s.id) },
+      )
+    }
+  }, [isDev, defaultStopId, stops])
+
+  // Demo/dev support: when we change kiosk binding (defaultStopId) on the server,
+  // keep the client selection synchronized so /api/eta and /api/vehicles match.
+  useEffect(() => {
+    if (!isDev || !defaultStopId) return
+    setSelectedStopId((prev) => (prev === defaultStopId ? prev : defaultStopId))
+  }, [isDev, defaultStopId])
   const [rawArrivals, setRawArrivals] = useState<EtaArrivalDTO[] | null>(null)
   const [loading, setLoading] = useState(true)
   const [currentTime, setCurrentTime] = useState(new Date())
@@ -115,6 +167,28 @@ export function KioskDisplay({ stops, defaultStopId, alerts }: KioskDisplayProps
   }, [smoothed, selectedStopId, allowedRouteSet])
 
   useEffect(() => {
+    if (!isDev || !selectedStopId) return
+    console.info("[kiosk-eta] raw /api/eta response", {
+      stop_id: selectedStopId,
+      raw_count: rawArrivals?.length ?? 0,
+      raw_vehicle_ids: (rawArrivals ?? []).map((a) => a.vehicle_id),
+      raw_route_numbers: (rawArrivals ?? []).map((a) => a.route_number),
+    })
+  }, [isDev, rawArrivals, selectedStopId])
+
+  useEffect(() => {
+    if (!isDev || !selectedStopId) return
+    console.info("[kiosk-eta] final arrivals after kiosk filters", {
+      stop_id: selectedStopId,
+      allowed_routes: allowedRouteNumbers,
+      smoothed_count: smoothed.length,
+      final_count: etas.length,
+      final_vehicle_ids: etas.map((e) => e.bus_id),
+      final_route_numbers: etas.map((e) => e.route?.route_number ?? "unknown"),
+    })
+  }, [isDev, selectedStopId, allowedRouteNumbers, smoothed, etas])
+
+  useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000)
     return () => clearInterval(timer)
   }, [])
@@ -128,8 +202,15 @@ export function KioskDisplay({ stops, defaultStopId, alerts }: KioskDisplayProps
 
     if (firstLoadForStop.current) setLoading(true)
     try {
+      const stopRow = stops.find((s) => s.id === selectedStopId)
+      if (isDev) {
+        console.info("[kiosk] GET /api/eta", {
+          stop_id_query: selectedStopId,
+          stop_code_row: stopRow?.stop_code,
+        })
+      }
       const res = await fetch(
-        `/api/eta?stop_id=${encodeURIComponent(selectedStopId)}`,
+        `/api/eta?stop_id=${encodeURIComponent(selectedStopId)}${isDev ? "&debug=1&trace=1" : ""}`,
         { cache: "no-store" }
       )
       if (!res.ok) {
@@ -146,7 +227,7 @@ export function KioskDisplay({ stops, defaultStopId, alerts }: KioskDisplayProps
         firstLoadForStop.current = false
       }
     }
-  }, [selectedStopId])
+  }, [selectedStopId, isDev, stops])
 
   useEffect(() => {
     void fetchSimulationEtas()
@@ -159,12 +240,19 @@ export function KioskDisplay({ stops, defaultStopId, alerts }: KioskDisplayProps
       <KioskHeader
         stopName={selectedStop?.name || t("kiosk.unknownStop")}
         currentTime={currentTime}
+        stopIdForApi={selectedStopId}
         stopCode={selectedStop?.stop_code}
+        showDevStopIds={isDev}
       />
 
       <main className="flex flex-1 flex-col gap-4 p-4 lg:p-6">
         <div className="flex flex-1 flex-col gap-4 lg:flex-row lg:gap-6">
           <div className="hidden w-full min-w-[320px] flex-1 flex-col gap-4 lg:flex lg:flex-[1.3]">
+            {isDev && (
+              <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                eta debug: raw={rawArrivals?.length ?? 0} smoothed={smoothed.length} final={etas.length}
+              </div>
+            )}
             <KioskArrivals etas={etas} loading={loading} currentTime={currentTime} />
             <KioskAlerts alerts={alerts} />
           </div>
@@ -192,6 +280,7 @@ export function KioskDisplay({ stops, defaultStopId, alerts }: KioskDisplayProps
                 stops={localizedStops}
                 selectedStopId={selectedStopId}
                 onSelect={setSelectedStopId}
+                showDevStopIds={isDev}
               />
             </div>
             <KioskEmergencyActions stopName={selectedStop?.name} />

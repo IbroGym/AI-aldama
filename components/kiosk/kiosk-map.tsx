@@ -25,6 +25,7 @@ type MiniVehicle = {
   lng: number
   route_number: string
   route_color: string
+  eta_minutes?: number
 }
 
 function busIcon(color: string) {
@@ -38,6 +39,7 @@ function busIcon(color: string) {
 
 export function KioskMap({ stop, stopId }: KioskMapProps) {
   const { t } = useI18n()
+  const isDev = process.env.NODE_ENV === "development"
   const [vehicles, setVehicles] = useState<MiniVehicle[]>([])
 
   useEffect(() => {
@@ -48,13 +50,23 @@ export function KioskMap({ stop, stopId }: KioskMapProps) {
     let cancelled = false
     const load = async () => {
       try {
+        if (isDev) {
+          console.info("[kiosk] GET /api/vehicles", {
+            stop_id_query: stopId,
+            stop_code_row: stop?.stop_code,
+          })
+        }
         const res = await fetch(
           `/api/vehicles?stop_id=${encodeURIComponent(stopId)}&filter=stop`,
           { cache: "no-store" }
         )
         if (!res.ok || cancelled) return
         const data = (await res.json()) as { vehicles: MiniVehicle[] }
-        if (!cancelled) setVehicles(data.vehicles ?? [])
+        if (!cancelled) {
+          // Keep mini-map consistent with kiosk arrivals: show only buses
+          // with an actionable ETA for the selected stop.
+          setVehicles((data.vehicles ?? []).filter((v) => v.eta_minutes != null))
+        }
       } catch {
         if (!cancelled) setVehicles([])
       }
@@ -65,7 +77,7 @@ export function KioskMap({ stop, stopId }: KioskMapProps) {
       cancelled = true
       clearInterval(interval)
     }
-  }, [stopId])
+  }, [stopId, stop?.stop_code, isDev])
 
   const center = useMemo<[number, number]>(
     () => [stop?.latitude ?? 51.1694, stop?.longitude ?? 71.4491],

@@ -24,6 +24,9 @@ export async function GET(req: NextRequest) {
     filter_stop_only: filter === "stop" && !!stopId,
     include_debug: debug,
   })
+  console.info(
+    `[sim-speed] /api/vehicles multiplier=${payload.simulation_speed_multiplier}`,
+  )
 
   return NextResponse.json(payload)
 }

@@ -1,10 +1,17 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { ASTANA_CENTER, getMockAstanaTransit } from "./mock-astana"
 import {
+  ROUTE_10_OUTBOUND_DEBUG_STOP_CODES,
+  normalizeStopCodeForLookup,
+  resolveRouteOrderOverrides,
+} from "./route-overrides"
+import { getRouteShapeOverride } from "./route-shape-overrides"
+import {
   buildArrivalsForStop,
   computeVehicleStates,
   type DbBusLite,
 } from "./engine"
+import { getSimulationClockSnapshot } from "./sim-clock"
 import { vehiclesDtoFromStates } from "./simulation"
 import type { EtaResponsePayload, TransitContextDTO, VehicleDTO } from "./types"
 
@@ -51,6 +58,31 @@ type BusRow = {
   is_active: boolean
 }
 
+function buildRoute10DebugOverrideManifest(stops: StopRow[]) {
+  const byNorm = new Map<string, StopRow[]>()
+  for (const s of stops) {
+    const k = normalizeStopCodeForLookup(s.stop_code)
+    const list = byNorm.get(k) ?? []
+    list.push(s)
+    byNorm.set(k, list)
+  }
+  const entry = (override_stop_code: string) => {
+    const list = byNorm.get(normalizeStopCodeForLookup(override_stop_code)) ?? []
+    const first = list[0]
+    return {
+      override_stop_code,
+      matched_by_stop_code: !!first,
+      resolved_id: first?.id ?? null,
+      resolved_stop_code: first?.stop_code ?? null,
+      resolved_name: first?.name ?? null,
+    }
+  }
+  return {
+    outbound_entries: ROUTE_10_OUTBOUND_DEBUG_STOP_CODES.map(entry),
+    inbound_entries: [...ROUTE_10_OUTBOUND_DEBUG_STOP_CODES].reverse().map(entry),
+  }
+}
+
 export async function loadTransitFromSupabase(
   supabase: SupabaseClient
 ): Promise<TransitContextDTO | null> {
@@ -72,11 +104,31 @@ export async function loadTransitFromSupabase(
         .order("stop_sequence"),
     ])
 
+  const activeStops = (stopsData ?? []) as StopRow[]
+  const activeNormCodes = new Set(
+    activeStops.map((s) => normalizeStopCodeForLookup(s.stop_code))
+  )
+  const missingRoute10DebugStopCodes = ROUTE_10_OUTBOUND_DEBUG_STOP_CODES.filter(
+    (code) => !activeNormCodes.has(normalizeStopCodeForLookup(code))
+  )
+  let route10DebugStops: StopRow[] = []
+  if (missingRoute10DebugStopCodes.length > 0) {
+    const { data: debugStopsData } = await supabase
+      .from("bus_stops")
+      .select("id, stop_code, name, latitude, longitude")
+      .in("stop_code", missingRoute10DebugStopCodes)
+    route10DebugStops = (debugStopsData ?? []) as StopRow[]
+  }
+
   if (!routesData?.length || !stopsData?.length) {
     return null
   }
 
-  const stops = (stopsData as StopRow[]).map((s) => ({
+  const stopByIdForMerge = new Map<string, StopRow>()
+  for (const s of [...activeStops, ...route10DebugStops]) {
+    stopByIdForMerge.set(s.id, s)
+  }
+  const stops = Array.from(stopByIdForMerge.values()).map((s) => ({
     id: s.id,
     stop_code: s.stop_code,
     name: s.name,
@@ -92,14 +144,31 @@ export async function loadTransitFromSupabase(
     byRoute.set(row.route_id, list)
   }
 
+  const overrideResult = resolveRouteOrderOverrides({
+    routes: routesData as RouteRow[],
+    stops: stops.map((s) => ({
+      id: s.id,
+      name: s.name,
+      stop_code: s.stop_code,
+    })),
+    routeStopsByRouteId: new Map(
+      Array.from(byRoute.entries()).map(([routeId, rows]) => [
+        routeId,
+        rows.map((r) => ({ stop_id: r.stop_id, stop_sequence: r.stop_sequence })),
+      ])
+    ),
+  })
+  const diagnosticsByRouteId = new Map(
+    overrideResult.diagnostics.map((d) => [d.route_id, d])
+  )
+
   const routes: TransitContextDTO["routes"] = []
   for (const r of routesData as RouteRow[]) {
-    const seq = (byRoute.get(r.id) ?? []).sort(
+    const seq = (byRoute.get(r.id) ?? []).slice().sort(
       (a, b) => a.stop_sequence - b.stop_sequence
     )
-    const orderedStops: TransitContextDTO["stops"] = []
+    const dbOrderedStops: TransitContextDTO["stops"] = []
     for (const row of seq) {
-      const sid = row.stop_id
       const fromJoin = pickStopJoin(row.stop)
       const s = fromJoin
         ? {
@@ -109,16 +178,75 @@ export async function loadTransitFromSupabase(
             lat: fromJoin.latitude,
             lng: fromJoin.longitude,
           }
-        : stopMap.get(sid)
-      if (s) orderedStops.push(s)
+        : stopMap.get(row.stop_id)
+      if (s) dbOrderedStops.push(s)
     }
+
+    const overrideIds = overrideResult.orderedStopIdsByRouteId.get(r.id)
+    const orderedStops =
+      overrideIds && overrideIds.length > 1
+        ? overrideIds
+            .map((sid) => stopMap.get(sid))
+            .filter(
+              (s): s is TransitContextDTO["stops"][number] => s != null
+            )
+        : dbOrderedStops
+    const routeDiag = diagnosticsByRouteId.get(r.id)
+
     if (orderedStops.length < 2) continue
 
-    const coordinates: [number, number][] = orderedStops.map((s) => [
+    const stopPolyline: [number, number][] = orderedStops.map((s) => [
       s.lat,
       s.lng,
     ])
-    coordinates.push([orderedStops[0].lat, orderedStops[0].lng])
+    stopPolyline.push([orderedStops[0].lat, orderedStops[0].lng])
+
+    // Direction-specific geometry for route 10 demo only.
+    const outboundOverrideShape =
+      r.route_number === "10"
+        ? getRouteShapeOverride({ route_number: r.route_number, direction: "outbound" })
+        : null
+    const inboundOverrideShape =
+      r.route_number === "10"
+        ? getRouteShapeOverride({ route_number: r.route_number, direction: "inbound" })
+        : null
+
+    const coordinates_by_direction: TransitContextDTO["routes"][number]["coordinates_by_direction"] =
+      r.route_number === "10"
+        ? {
+            outbound: outboundOverrideShape ?? stopPolyline,
+            inbound: inboundOverrideShape ?? stopPolyline,
+          }
+        : undefined
+
+    const geometry_source_by_direction:
+      | TransitContextDTO["routes"][number]["geometry_source_by_direction"]
+      | undefined =
+      r.route_number === "10"
+        ? {
+            outbound: outboundOverrideShape ? "shape_override" : "stop_polyline",
+            inbound: inboundOverrideShape ? "shape_override" : "stop_polyline",
+          }
+        : undefined
+
+    const geometry_point_count_by_direction:
+      | TransitContextDTO["routes"][number]["geometry_point_count_by_direction"]
+      | undefined =
+      r.route_number === "10"
+        ? {
+            outbound: (outboundOverrideShape ?? stopPolyline).length,
+            inbound: (inboundOverrideShape ?? stopPolyline).length,
+          }
+        : undefined
+
+    const coordinates: [number, number][] =
+      r.route_number === "10" && outboundOverrideShape
+        ? outboundOverrideShape
+        : stopPolyline
+
+    const geometry_source = r.route_number === "10" && outboundOverrideShape
+      ? "shape_override"
+      : "stop_polyline"
 
     routes.push({
       id: r.id,
@@ -126,7 +254,15 @@ export async function loadTransitFromSupabase(
       route_name: r.route_name,
       color: r.color || "#3b82f6",
       coordinates,
+      geometry_source,
+      geometry_point_count: coordinates.length,
+      coordinates_by_direction,
+      geometry_source_by_direction,
+      geometry_point_count_by_direction,
       stop_ids_ordered: orderedStops.map((s) => s.id),
+      order_source: routeDiag?.order_source ?? "db",
+      direction: routeDiag?.direction,
+      override_warnings: routeDiag?.warnings ?? [],
     })
   }
 
@@ -146,6 +282,17 @@ export async function loadTransitFromSupabase(
     stops,
     routes,
     data_source: "supabase",
+    route_order_diagnostics: overrideResult.diagnostics,
+    route_override_resolution_report: overrideResult.resolutionReports,
+    route_direction_debug: Array.from(overrideResult.directionDebugByRouteId.values()),
+    bus_stops_loaded_count: stops.length,
+    bus_stops_active_query_count: activeStops.length,
+    bus_stops_debug_code_supplement_count: route10DebugStops.length,
+    bus_stops_load_scope:
+      "Active bus_stops only (is_active=true) plus explicit route-10 debug stop_code supplement lookup",
+    route10_debug_override_manifest: buildRoute10DebugOverrideManifest(
+      Array.from(stopByIdForMerge.values())
+    ),
   }
 }
 
@@ -176,9 +323,19 @@ export async function getTransitContext(
 export async function getSimulationSnapshot(supabase: SupabaseClient | null) {
   const transit = await getTransitContext(supabase)
   const dbBuses = supabase ? await loadDbBuses(supabase) : []
-  const server_time_ms = Date.now()
-  const states = computeVehicleStates(transit, server_time_ms, dbBuses)
-  return { transit, states, server_time_ms }
+  const clock = getSimulationClockSnapshot()
+  const server_time_ms = clock.real_now_ms
+  const sim_time_ms = clock.sim_now_ms
+  console.info(
+    `[sim-speed] snapshot multiplier=${clock.simulation_speed_multiplier} real_now_ms=${server_time_ms} sim_now_ms=${Math.round(sim_time_ms)}`,
+  )
+  const states = computeVehicleStates(
+    transit,
+    server_time_ms,
+    dbBuses,
+    clock.simulation_speed_multiplier
+  )
+  return { transit, states, server_time_ms, sim_time_ms, simulation_speed_multiplier: clock.simulation_speed_multiplier }
 }
 
 export interface VehiclesResponsePayload {
@@ -188,6 +345,8 @@ export interface VehiclesResponsePayload {
   filter_stop_only: boolean
   vehicle_data_source: "simulated" | "gtfs_rt" | "database"
   server_time_ms: number
+  sim_time_ms: number
+  simulation_speed_multiplier: number
 }
 
 export async function getVehiclesPayload(
@@ -198,7 +357,7 @@ export async function getVehiclesPayload(
     include_debug?: boolean
   }
 ): Promise<VehiclesResponsePayload> {
-  const { transit, states, server_time_ms } = await getSimulationSnapshot(
+  const { transit, states, server_time_ms, sim_time_ms, simulation_speed_multiplier } = await getSimulationSnapshot(
     supabase
   )
   const { vehicles, highlighted_route_ids } = vehiclesDtoFromStates(
@@ -208,6 +367,7 @@ export async function getVehiclesPayload(
       focus_stop_id: params.focus_stop_id ?? null,
       filter_stop_only: params.filter_stop_only ?? false,
       include_debug: params.include_debug ?? false,
+      server_time_ms,
     }
   )
 
@@ -218,15 +378,18 @@ export async function getVehiclesPayload(
     filter_stop_only: params.filter_stop_only ?? false,
     vehicle_data_source: "simulated",
     server_time_ms,
+    sim_time_ms,
+    simulation_speed_multiplier,
   }
 }
 
 export async function getEtaPayload(
   supabase: SupabaseClient | null,
   stopId: string,
-  includeDebug = false
+  includeDebug = false,
+  enableTraceLogs = false
 ): Promise<EtaResponsePayload> {
-  const { transit, states, server_time_ms } = await getSimulationSnapshot(
+  const { transit, states, server_time_ms, sim_time_ms, simulation_speed_multiplier } = await getSimulationSnapshot(
     supabase
   )
   const stopById = new Map(transit.stops.map((s) => [s.id, s]))
@@ -236,13 +399,16 @@ export async function getEtaPayload(
     stopId,
     stopById,
     server_time_ms,
-    includeDebug
+    includeDebug,
+    enableTraceLogs
   )
 
   return {
     stop_id: stopId,
     arrivals,
     server_time_ms,
+    sim_time_ms,
+    simulation_speed_multiplier,
     data_source: "simulated",
     transit_data_source: transit.data_source,
   }
