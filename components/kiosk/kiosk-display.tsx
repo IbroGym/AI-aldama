@@ -1,5 +1,6 @@
 "use client"
 
+import dynamic from "next/dynamic"
 import { useState, useEffect, useMemo, useCallback, useRef } from "react"
 import type { BusStop, Alert, EtaPrediction, BusRoute } from "@/lib/types/database"
 import type { EtaArrivalDTO } from "@/lib/vehicles/types"
@@ -8,7 +9,19 @@ import { KioskArrivals } from "./kiosk-arrivals"
 import { KioskAlerts } from "./kiosk-alerts"
 import { KioskVoiceAssistant } from "./kiosk-voice-assistant"
 import { KioskStopSelector } from "./kiosk-stop-selector"
-import { KioskMap } from "./kiosk-map"
+
+const KioskMap = dynamic(
+  () => import("./kiosk-map").then((m) => m.KioskMap),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex flex-col gap-3 rounded-3xl border border-slate-200 bg-white p-4 shadow-sm lg:p-5">
+        <div className="h-5 w-44 animate-pulse rounded bg-slate-200" />
+        <div className="h-40 animate-pulse rounded-2xl bg-slate-100 md:h-52" />
+      </div>
+    ),
+  },
+)
 import { KioskWeather } from "./kiosk-weather"
 import { KioskEmergencyActions } from "./kiosk-emergency-actions"
 import { useI18n } from "@/components/i18n-provider"
@@ -241,18 +254,12 @@ export function KioskDisplay({ stops, defaultStopId, alerts }: KioskDisplayProps
         stopName={selectedStop?.name || t("kiosk.unknownStop")}
         currentTime={currentTime}
         stopIdForApi={selectedStopId}
-        stopCode={selectedStop?.stop_code}
         showDevStopIds={isDev}
       />
 
       <main className="flex flex-1 flex-col gap-4 p-4 lg:p-6">
         <div className="flex flex-1 flex-col gap-4 lg:flex-row lg:gap-6">
           <div className="hidden w-full min-w-[320px] flex-1 flex-col gap-4 lg:flex lg:flex-[1.3]">
-            {isDev && (
-              <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
-                eta debug: raw={rawArrivals?.length ?? 0} smoothed={smoothed.length} final={etas.length}
-              </div>
-            )}
             <KioskArrivals etas={etas} loading={loading} currentTime={currentTime} />
             <KioskAlerts alerts={alerts} />
           </div>
