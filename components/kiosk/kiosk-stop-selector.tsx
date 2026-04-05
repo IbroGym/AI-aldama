@@ -59,9 +59,6 @@ export function KioskStopSelector({
                   <div className="flex flex-col gap-0.5 text-left">
                     <div className="flex items-center gap-2">
                       <span>{stop.name}</span>
-                      <span className="text-xs text-slate-400">
-                        code {stop.stop_code}
-                      </span>
                     </div>
                     {showDevStopIds && (
                       <span className="text-[10px] font-mono text-slate-500">

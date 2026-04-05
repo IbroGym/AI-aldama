@@ -8,8 +8,6 @@ interface KioskHeaderProps {
   currentTime: Date
   /** public.bus_stops.id — same value sent to /api/eta and /api/vehicles */
   stopIdForApi?: string
-  /** public.bus_stops.stop_code (often GTFS stop_id); not the API parameter */
-  stopCode?: string
   showDevStopIds?: boolean
 }
 
@@ -17,7 +15,6 @@ export function KioskHeader({
   stopName,
   currentTime,
   stopIdForApi,
-  stopCode,
   showDevStopIds,
 }: KioskHeaderProps) {
   const { locale } = useI18n()
@@ -92,12 +89,6 @@ export function KioskHeader({
               {showDevStopIds && stopIdForApi && (
                 <div className="text-[11px] font-mono text-slate-700">
                   API stop_id: {stopIdForApi}
-                </div>
-              )}
-              {stopCode && (
-                <div className="text-xs text-slate-500">
-                  {showDevStopIds ? "stop_code (ref): " : "Ref: "}
-                  {stopCode}
                 </div>
               )}
             </div>

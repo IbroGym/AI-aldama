@@ -43,7 +43,7 @@ const MOCK_ROUTES: MapRouteDTO[] = [
     id: "mock-route-12",
     route_number: "12",
     route_name: "Khan Shatyr — Opera loop",
-    color: "#2563eb",
+    color: "#16a34a",
     coordinates: [
       [51.1258, 71.4116],
       [51.1248, 71.418],

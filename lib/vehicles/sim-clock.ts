@@ -1,4 +1,4 @@
-const ALLOWED_SIMULATION_SPEEDS = [1, 5, 10, 20] as const
+const ALLOWED_SIMULATION_SPEEDS = [1, 5, 10, 20, 50] as const
 
 export type SimulationSpeedMultiplier = (typeof ALLOWED_SIMULATION_SPEEDS)[number]
 

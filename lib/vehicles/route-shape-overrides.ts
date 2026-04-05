@@ -1,5 +1,9 @@
 import type { MapRouteDTO } from "./types"
 import { haversineMeters } from "./geo"
+import { ROUTE_12_INBOUND_SHAPE } from "./route-12-inbound-shape"
+import { ROUTE_12_OUTBOUND_SHAPE } from "./route-12-outbound-shape"
+import { ROUTE_46_INBOUND_SHAPE } from "./route-46-inbound-shape"
+import { ROUTE_46_OUTBOUND_SHAPE } from "./route-46-outbound-shape"
 
 export type RouteGeometrySource = "shape_override" | "stop_polyline"
 
@@ -283,6 +287,10 @@ validateRoute10Shape(ROUTE_10_INBOUND_SHAPE, "inbound")
 const SHAPE_OVERRIDES: Partial<Record<ShapeOverrideKey, ShapePoint[]>> = {
   "10:outbound": ROUTE_10_OUTBOUND_SHAPE,
   "10:inbound": ROUTE_10_INBOUND_SHAPE,
+  "12:outbound": ROUTE_12_OUTBOUND_SHAPE as ShapePoint[],
+  "12:inbound": ROUTE_12_INBOUND_SHAPE as ShapePoint[],
+  "46:outbound": ROUTE_46_OUTBOUND_SHAPE as ShapePoint[],
+  "46:inbound": ROUTE_46_INBOUND_SHAPE as ShapePoint[],
 }
 
 export function getRouteShapeOverride(params: {

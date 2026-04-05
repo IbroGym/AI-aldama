@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import type { TransitContextDTO, VehicleDTO } from "@/lib/vehicles/types"
+import { getAllowedSimulationSpeeds } from "@/lib/vehicles/sim-clock"
 import {
   Fragment,
   useCallback,
@@ -290,15 +291,10 @@ export function TransitMapView() {
     () => new Map((transit?.stops ?? []).map((s) => [s.id, s])),
     [transit],
   )
-  const route10 = useMemo(
-    () => transit?.routes.find((r) => r.route_number === "10") ?? null,
-    [transit],
-  )
   const visibleRouteIds = useMemo(() => {
     if (!transit) return new Set<string>()
-    if (focusedRouteId) return new Set([focusedRouteId])
     return new Set(enabledRouteIds)
-  }, [transit, focusedRouteId, enabledRouteIds])
+  }, [transit, enabledRouteIds])
   const visibleRoutes = useMemo(
     () => (transit?.routes ?? []).filter((r) => visibleRouteIds.has(r.id)),
     [transit, visibleRouteIds],
@@ -433,7 +429,7 @@ export function TransitMapView() {
                       void setSimulationSpeed(next)
                     }}
                   >
-                    {[1, 5, 10, 20].map((m) => (
+                    {getAllowedSimulationSpeeds().map((m) => (
                       <option key={`sim-${m}`} value={String(m)}>
                         {m}x
                       </option>
@@ -442,47 +438,15 @@ export function TransitMapView() {
                 </div>
               )}
               <div className="flex items-center gap-2 rounded border px-2 py-1">
-                <Label className="text-xs font-normal">Focus route 10</Label>
+                <Label htmlFor="capture-coordinates" className="text-xs font-normal">
+                  Capture coordinates
+                </Label>
                 <Switch
-                  checked={focusedRouteId === route10?.id}
-                  disabled={!route10}
-                  onCheckedChange={(on) => {
-                    setFocusedRouteId(on ? route10?.id ?? null : null)
-                    if (on && route10) {
-                      setEnabledRouteIds([route10.id])
-                    }
-                  }}
+                  id="capture-coordinates"
+                  checked={captureMode}
+                  onCheckedChange={setCaptureMode}
                 />
               </div>
-                <div className="flex items-center gap-2 rounded border px-2 py-1">
-                  <Label htmlFor="capture-coordinates" className="text-xs font-normal">
-                    Capture coordinates
-                  </Label>
-                  <Switch
-                    id="capture-coordinates"
-                    checked={captureMode}
-                    onCheckedChange={setCaptureMode}
-                  />
-                </div>
-              {focusedRouteId === route10?.id && (
-                <div className="flex items-center gap-1 rounded border px-2 py-1">
-                  <Label className="text-xs font-normal">Direction</Label>
-                  <button
-                    type="button"
-                    className={`rounded px-2 py-1 text-xs ${focusedDirection === "outbound" ? "bg-primary text-primary-foreground" : "bg-muted"}`}
-                    onClick={() => setFocusedDirection("outbound")}
-                  >
-                    Outbound
-                  </button>
-                  <button
-                    type="button"
-                    className={`rounded px-2 py-1 text-xs ${focusedDirection === "inbound" ? "bg-primary text-primary-foreground" : "bg-muted"}`}
-                    onClick={() => setFocusedDirection("inbound")}
-                  >
-                    Inbound
-                  </button>
-                </div>
-              )}
               <div className="flex items-center gap-2">
                 <Switch
                   id="only-stop"
@@ -530,31 +494,9 @@ export function TransitMapView() {
                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
               />
               {visibleRoutes.map((route) => {
-                if (
-                  route.route_number === "10" &&
-                  route.coordinates_by_direction
-                ) {
+                if (route.coordinates_by_direction) {
                   const outbound = route.coordinates_by_direction.outbound ?? route.coordinates
                   const inbound = route.coordinates_by_direction.inbound ?? route.coordinates
-
-                  if (focusedRouteId === route.id) {
-                    const active =
-                      focusedDirection === "outbound" ? outbound : inbound
-                    return (
-                      <Polyline
-                        key={`${route.id}:${focusedDirection}`}
-                        positions={active.map(
-                          ([lat, lng]) => [lat, lng] as [number, number],
-                        )}
-                        pathOptions={{
-                          color: route.color,
-                          ...routeStyle(route.id),
-                          dashArray:
-                            focusedDirection === "inbound" ? "7 6" : undefined,
-                        }}
-                      />
-                    )
-                  }
 
                   return (
                     <Fragment key={`${route.id}:outbound+inbound`}>
@@ -625,7 +567,11 @@ export function TransitMapView() {
                       <Popup>
                         <div className="text-sm font-medium">{stop.name}</div>
                         <div className="text-xs text-muted-foreground">
-                          {stop.stop_code}
+                          DB id: <span className="font-mono">{stop.id}</span>
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          GTFS/reference:{" "}
+                          <span className="font-mono">{stop.stop_code}</span>
                         </div>
                       </Popup>
                     )}
@@ -646,16 +592,15 @@ export function TransitMapView() {
                 >
                   <Tooltip direction="top" offset={[0, -10]}>
                     {v.route_number}
-                    {focusedRoute?.route_number === "10" &&
-                      v.route_number === "10" && (
-                        <span className="ml-1 text-[11px] text-muted-foreground">
-                          • {v.direction ?? focusedDirection}
-                          {v.distance_along_m != null
-                            ? ` • ${Math.round(v.distance_along_m)}m`
-                            : ""}
-                          {v.terminal_pause_active ? " (pause)" : ""}
-                        </span>
-                      )}
+                    {v.route_number === "10" && v.direction && (
+                      <span className="ml-1 text-[11px] text-muted-foreground">
+                        • {v.direction}
+                        {v.distance_along_m != null
+                          ? ` • ${Math.round(v.distance_along_m)}m`
+                          : ""}
+                        {v.terminal_pause_active ? " (pause)" : ""}
+                      </span>
+                    )}
                   </Tooltip>
                 </Marker>
               ))}
@@ -787,7 +732,26 @@ export function TransitMapView() {
           </div>
           {focusedRoute?.route_number === "10" && (
             <div className="rounded-md border bg-muted/40 p-3 text-xs">
-              <div className="font-medium">Route 10 diagnostics</div>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="font-medium">Route 10 diagnostics</div>
+                <div className="flex items-center gap-1">
+                  <span className="text-muted-foreground">Direction</span>
+                  <button
+                    type="button"
+                    className={`rounded px-2 py-0.5 text-[11px] ${focusedDirection === "outbound" ? "bg-primary text-primary-foreground" : "bg-muted"}`}
+                    onClick={() => setFocusedDirection("outbound")}
+                  >
+                    Outbound
+                  </button>
+                  <button
+                    type="button"
+                    className={`rounded px-2 py-0.5 text-[11px] ${focusedDirection === "inbound" ? "bg-primary text-primary-foreground" : "bg-muted"}`}
+                    onClick={() => setFocusedDirection("inbound")}
+                  >
+                    Inbound
+                  </button>
+                </div>
+              </div>
               <div className="mt-1">
                 order source: {focusedOrderDiag?.order_source ?? focusedRoute.order_source ?? "db"}
               </div>

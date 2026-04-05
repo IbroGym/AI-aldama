@@ -113,6 +113,238 @@ export const ROUTE_10_OUTBOUND_DEBUG_STOP_CODES: string[] = [
   "0efb91bb-82ba-4082-a5d9-69e392b7510f",
 ]
 
+/** `public.bus_stops.id` — authoritative Route 10 inbound stop order (airport → railway). */
+export const ROUTE_10_INBOUND_STOP_IDS: string[] = [
+  "8c4ad112-e945-4ebf-ace1-1ac761470bfc",
+  "80338c35-6703-4c0f-b831-aca3afa3a279",
+  "fa7f84ee-33a5-4edb-9a28-9c3ed44f0963",
+  "9a0b5714-13ea-401a-8c9a-e8c2a79ef5e2",
+  "36719798-850b-490c-a567-4fa9d276a42e",
+  "3ef339dd-93fa-4cc0-aa0f-f25b24ac750e",
+  "a495bed9-0103-4a48-98e5-145ebd3da30e",
+  "b3f915ce-0da2-43ec-9e16-8208aa650b51",
+  "ff4cddc7-780c-4572-bd9d-2182d9b011ef",
+  "2e11f77b-e8a2-40d1-a3e0-1ba1b6595d7c",
+  "fc6f4604-832d-4d2c-a8f7-8c3ac58cd155",
+  "e05a8947-123a-4648-ab33-e453b800b2c5",
+  "95ac140c-ef7f-4f0c-a78f-2915c58da204",
+  "7a9e7a00-d5ed-40c8-9804-d16baf6555a9",
+  "903bfe31-799b-431f-aa46-f01b143f722c",
+  "e615d78e-fb65-4fac-a8fc-d13df60cc89b",
+  "7f9bfee1-e5df-49d9-9bf6-22cbc923fe33",
+  "00e3da42-2480-433c-bc53-b5d86c997e52",
+  "3e4efd1c-b54f-40ca-ad00-f7461fe834aa",
+  "28d46110-8c8b-4e40-a826-672c3cc8ab2f",
+  "d7c8a98a-cee0-4225-bc8a-fbc5286a3e69",
+  "cb6b7be7-9469-4270-add7-d6ee53e7dc7c",
+  "1f48306b-7059-434d-ac20-aa05073980c6",
+  "2ad8eaaf-0637-483a-9c9a-ca1eaafda630",
+  "6b21616a-10e1-42ec-8859-2cf479100c0c",
+  "a9c94fae-8d1a-4328-aa83-43bd09adb565",
+  "775e9d11-481a-4254-b4b0-c45233177219",
+  "5d659759-49c4-446d-8a4e-39244625203a",
+  "6778b537-a71e-458f-bd02-cd02f06f6f2f",
+  "875bb9bc-ca37-4fb1-8201-c5d266195f67",
+  "7dfa8094-84c2-4f29-97c3-d9014e34b179",
+  "0f6c7a9e-56a2-42a2-9680-468d737d9e39",
+  "bf2dbe1a-e02f-482d-a8c0-f8bb6c1e40b3",
+  "f7180580-7743-4ed3-8a27-e1df3dfee535",
+  "97e51874-aa6b-4633-b6d6-125d58a39aef",
+  "6029c12a-8f9b-411f-98b8-fa198b4b870b",
+  "360660cc-4727-491b-ab9d-17352b49e551",
+  "d8308bf5-f6e3-4063-82bc-6f614de6a643",
+  "a9adbb0f-d9f8-43d7-9084-dc71cf757017",
+]
+
+/** `public.bus_stops.id` — authoritative Route 12 outbound stop order (railway → airport). */
+export const ROUTE_12_OUTBOUND_STOP_IDS: string[] = [
+  "a9adbb0f-d9f8-43d7-9084-dc71cf757017",
+  "f43ad2c6-e929-4adb-9193-0b941589fde7",
+  "b95704f4-53a1-44ad-81ac-c8e3e096f55b",
+  "f1a651bb-9f0a-4b79-b24c-8860e2414b17",
+  "fc4e6f95-9c1d-4140-af02-42798d29e9d2",
+  "2ab617f3-ae13-4342-a081-acfac88b08e1",
+  "9c4d7da0-372a-4f29-95ab-124a69ed0b5c",
+  "6f215480-0e7a-4895-9036-016f483372e8",
+  "58aa8112-1117-44e8-8b13-4d6e740a0d8d",
+  "89cce566-e562-4822-80d8-21baf7fa01e2",
+  "b291e82e-dc84-4953-9802-d902d12a510c",
+  "6148fe37-0bd2-4f90-8a10-8ee1727713c9",
+  "d7c8a98a-cee0-4225-bc8a-fbc5286a3e69",
+  "cb6b7be7-9469-4270-add7-d6ee53e7dc7c",
+  "1f48306b-7059-434d-ac20-aa05073980c6",
+  "230f5f2e-7cfc-4c72-b0b5-2070ad304dda",
+  "a93cf493-9a22-4ebd-90af-8fcfbc3b815e",
+  "971bbf17-37ad-464d-afec-34478d0fe940",
+  "72dfa0b3-2e5e-4fa5-808c-b988efebab18",
+  "9e9fd318-3588-4fbf-8b55-844f8def6e6c",
+  "30009031-c562-4173-94ce-dd6b04fb9c52",
+  "87b4c4d2-e450-47bb-8167-ba30517d3584",
+  "ccf3c3ce-1eb6-401a-9ad0-890002d77398",
+  "25541b73-6493-4727-84c0-10a15d8909d9",
+  "4c3156a7-626d-4a27-a7c0-73dcd13de812",
+  "ad73c782-8941-443c-811a-dbbbd7bd276d",
+  "e04ab35c-c18a-4df8-a356-22b1fd7f171d",
+  "f8833d5d-6899-4ee7-9f45-b4861942acc3",
+  "5b3a1376-dbac-4f61-a8b7-5e800273ad74",
+  "e157cf9b-5ce5-4341-b367-45ef8ff51c7b",
+  "2bf57317-982f-477e-ace9-107adf538820",
+  "9cd87750-8777-4035-bb54-02804977f733",
+  "c88f23b4-8c48-4756-b906-6a6589a78c1e",
+  "f404a5e7-46cd-45b9-a4a5-e7a1b31d07d1",
+  "22bcafea-faa2-4f03-b12a-982d0534b454",
+  "d5332b55-fde0-4dcb-a9bd-89e563bcc6f2",
+  "19362545-6900-4aae-9f6c-081a2a5e16b0",
+  "8c4ad112-e945-4ebf-ace1-1ac761470bfc",
+]
+
+/** `public.bus_stops.id` — authoritative Route 12 inbound stop order (airport → railway). */
+export const ROUTE_12_INBOUND_STOP_IDS: string[] = [
+  "8c4ad112-e945-4ebf-ace1-1ac761470bfc",
+  "80338c35-6703-4c0f-b831-aca3afa3a279",
+  "fa7f84ee-33a5-4edb-9a28-9c3ed44f0963",
+  "084d1faa-1760-4e73-b87f-402f162e322d",
+  "7f2b8049-6f1b-4dac-923f-a5ce44159857",
+  "36719798-850b-490c-a567-4fa9d276a42e",
+  "3ef339dd-93fa-4cc0-aa0f-f25b24ac750e",
+  "a495bed9-0103-4a48-98e5-145ebd3da30e",
+  "1dd16afc-a1a9-40df-bd41-8abedb41d474",
+  "a42908e2-ec24-4691-ae94-c21c7d11010f",
+  "e82fe9d6-6d49-41e0-8d2f-5a893c86c07d",
+  "800a80ce-23a3-4fe1-964f-6f16f36da46b",
+  "3ffe7673-eb09-4c19-981f-a6dc16ccafa7",
+  "639fb7f4-03de-4101-a720-b40e2c331ce6",
+  "7fbd2e34-0ae5-4fe9-a862-c5e51805b825",
+  "0845f091-2b52-4028-b04b-42962dfc625e",
+  "73d72c5a-d453-487f-89b1-2a0229bc7d58",
+  "6cb3bdad-7007-4089-944e-7f5a81554422",
+  "e33a4a65-00ac-47c5-b596-fc24579461f1",
+  "513f23f3-920b-4595-8687-21dd8a40f880",
+  "391f204d-d43b-48ee-8165-5376e411756c",
+  "590dd9f3-dfe6-41cc-b20f-5a42ad2b720b",
+  "677b8609-b770-428d-a839-7ab974533cda",
+  "146de365-3e9b-4301-9a3a-e48817c4c5c0",
+  "9a8dbd07-3c87-4fc8-abb8-74dc677d4700",
+  "ed159e65-b201-480e-9bd2-7fc36378060a",
+  "0ae68bb8-6b0d-4025-8898-16debf368904",
+  "c4111e18-d665-4eea-9457-dbab7b0e2db4",
+  "523212ae-53cd-459e-bc9c-c43e93cad377",
+  "e9ef5ec1-f6e2-48bb-9fad-e70b78d534e0",
+  "fe270511-6de7-4199-af42-d62c27de4412",
+  "c2d9a8ef-0ba9-40a2-8bdb-5b56a7935569",
+  "30cb809d-3e37-4032-9dd1-cddbb4884014",
+  "87814294-45e9-48cf-93a5-0d894ce7cc6a",
+  "7d6ebb5c-57c7-4e9f-8a12-d2ab9c287fbd",
+  "7c6bda6d-79a5-4cff-8455-1e9775f1ec4b",
+  "46260777-0034-4d2a-9609-8bb0bcf5c582",
+  "4c8169c1-1f16-4d91-a410-32409ee95a4c",
+  "672f861d-d095-4c8e-886c-1758f3a43539",
+  "76079b7a-41a8-40eb-bebd-e111c4f83830",
+  "d8308bf5-f6e3-4063-82bc-6f614de6a643",
+  "a9adbb0f-d9f8-43d7-9084-dc71cf757017",
+]
+
+/** `public.bus_stops.id` — authoritative Route 46 outbound stop order. */
+export const ROUTE_46_OUTBOUND_STOP_IDS: string[] = [
+  "6e0f2eb6-c144-4f73-8628-20f062f8f9b4",
+  "944c30c5-9c8b-4b83-9b15-d3c9f8ad0267",
+  "3feece80-16e2-4be4-b877-4b835cebdb55",
+  "55f334b4-a2aa-4167-9a69-baf050dc888a",
+  "b63c2105-df1d-4e13-97c4-3b5a77732aeb",
+  "d451a22c-4be8-411d-a3ff-f794e21e2cc3",
+  "81ec1955-96fe-498c-ad24-bdf9adac0776",
+  "76566165-102d-4d2e-9a5e-1f738496c6c8",
+  "9dcaf554-5443-43f7-aea6-4122d4b08a9e",
+  "f908a8f1-39d7-4b48-b398-0974ea73cd69",
+  "6e9b7f98-ced1-4e6e-bea0-c60837a01677",
+  "7e3aedbe-061e-4668-8cb2-cbe033cd5886",
+  "45ed5115-27e6-4c15-971c-1c424a4dfd4a",
+  "66a7bbc1-b134-4e90-bb17-ac276ab53eae",
+  "c06d5588-daef-436d-ae2c-03285da76243",
+  "bcc50893-bb3c-42d1-9b7b-5c346c354fa9",
+  "c260516b-1c89-4497-be5f-f901519c17b4",
+  "4abaad75-7534-4155-8f4a-2b03dcc25f2c",
+  "cc0c7f56-575e-4084-9b7c-367e15eb16bc",
+  "a16ab07e-740c-46e9-b410-fc0a246a2183",
+  "c1fa3e33-3769-43cd-9be6-c6590f4d5225",
+  "1f79ffe9-c2dc-4f5d-a0b6-b024c56f8ee0",
+  "2ab617f3-ae13-4342-a081-acfac88b08e1",
+  "9c4d7da0-372a-4f29-95ab-124a69ed0b5c",
+  "6f215480-0e7a-4895-9036-016f483372e8",
+  "58aa8112-1117-44e8-8b13-4d6e740a0d8d",
+  "89cce566-e562-4822-80d8-21baf7fa01e2",
+  "b291e82e-dc84-4953-9802-d902d12a510c",
+  "6148fe37-0bd2-4f90-8a10-8ee1727713c9",
+  "7f1734d2-4f20-44b5-b36c-40fdfbd095fe",
+  "aaccb97c-13df-4e51-b2f0-342da62e3fab",
+  "5c02cbb4-a8a5-4729-8e73-6a584ce54390",
+  "28d46110-8c8b-4e40-a826-672c3cc8ab2f",
+  "963b19b2-79f1-4ba1-9b1e-f88aeeb36044",
+  "56c69c60-af3c-4f5a-bfbc-e324324d6fba",
+  "1f48306b-7059-434d-ac20-aa05073980c6",
+  "230f5f2e-7cfc-4c72-b0b5-2070ad304dda",
+  "a93cf493-9a22-4ebd-90af-8fcfbc3b815e",
+  "971bbf17-37ad-464d-afec-34478d0fe940",
+  "72dfa0b3-2e5e-4fa5-808c-b988efebab18",
+  "9e9fd318-3588-4fbf-8b55-844f8def6e6c",
+  "30009031-c562-4173-94ce-dd6b04fb9c52",
+  "87b4c4d2-e450-47bb-8167-ba30517d3584",
+  "c7e5d98f-1553-4e2e-b805-8626602f2da9",
+  "ff78d4c1-be14-4394-86f7-6fd0fca30d5d",
+  "59bcf0b7-9807-41b3-b745-796549ec6334",
+  "d3c430fc-56ec-4540-b971-ebca0832c725",
+]
+
+/** `public.bus_stops.id` — authoritative Route 46 inbound stop order. */
+export const ROUTE_46_INBOUND_STOP_IDS: string[] = [
+  "d3c430fc-56ec-4540-b971-ebca0832c725",
+  "605ccc1e-23cb-4e9a-b197-22a63e5a956a",
+  "d8c9f6df-19e4-4859-b94b-fa547a145e70",
+  "60034083-7e60-4a6c-a043-067d89bad17f",
+  "3a45f51b-d45d-4519-a07d-fa6cfbaee162",
+  "0845f091-2b52-4028-b04b-42962dfc625e",
+  "73d72c5a-d453-487f-89b1-2a0229bc7d58",
+  "6cb3bdad-7007-4089-944e-7f5a81554422",
+  "e33a4a65-00ac-47c5-b596-fc24579461f1",
+  "513f23f3-920b-4595-8687-21dd8a40f880",
+  "391f204d-d43b-48ee-8165-5376e411756c",
+  "590dd9f3-dfe6-41cc-b20f-5a42ad2b720b",
+  "677b8609-b770-428d-a839-7ab974533cda",
+  "146de365-3e9b-4301-9a3a-e48817c4c5c0",
+  "ee3ef047-6a12-4eaf-a2fe-c8baf711e89b",
+  "e4add2a3-fa86-4511-8540-c5006fbb69ac",
+  "e2e8f49f-00b0-4c17-978d-8e63615efee8",
+  "8f3f9eba-d6e5-4eea-8996-4bb2bfb02463",
+  "0ae68bb8-6b0d-4025-8898-16debf368904",
+  "c4111e18-d665-4eea-9457-dbab7b0e2db4",
+  "523212ae-53cd-459e-bc9c-c43e93cad377",
+  "e9ef5ec1-f6e2-48bb-9fad-e70b78d534e0",
+  "fe270511-6de7-4199-af42-d62c27de4412",
+  "c2d9a8ef-0ba9-40a2-8bdb-5b56a7935569",
+  "30cb809d-3e37-4032-9dd1-cddbb4884014",
+  "87814294-45e9-48cf-93a5-0d894ce7cc6a",
+  "7d6ebb5c-57c7-4e9f-8a12-d2ab9c287fbd",
+  "9b63574a-d692-41b6-85ff-1641e1fec677",
+  "e499f8f0-4fc2-43e2-827e-ffa39e366555",
+  "cc0c7f56-575e-4084-9b7c-367e15eb16bc",
+  "1feff38e-8e78-4cfe-8f9e-2260e688c92e",
+  "709169e0-d534-4c03-b37c-2821ada3a79f",
+  "27281a1c-7b14-484b-8820-f7fae2d080fd",
+  "17615410-f70d-484d-bbc4-8fee4e3371f1",
+  "917927a8-1a41-4b75-b34b-251ef79a76d6",
+  "fb1afe6a-d227-4a75-a09d-a699ddb7135c",
+  "44d8f22a-8e9a-4e34-a4ca-a34c4204362f",
+  "e8a2acd2-e2e7-4b1d-ac99-8d2e7a51566b",
+  "7035dd11-761b-40a9-860b-24d9b1b48c78",
+  "452e2953-e249-4376-bb88-5b0ce9c6a6b2",
+  "620a85b4-3547-42e8-a605-b8e0bbacb6a7",
+  "85c0319a-42f0-404e-8dea-ade4ede1f12b",
+  "7f9d77fe-90fc-4b6b-8d9e-03b19f935809",
+  "5391b527-9aca-4609-bfff-f4bc06028e92",
+  "27d8a517-89c8-461a-978c-4d130be266ca",
+  "78b8c8b2-0656-44ce-ab21-d10e44c42117",
+]
+
 /** Normalized key for matching override `stop_code` to loaded rows. */
 export function normalizeStopCodeForLookup(code: string): string {
   return code.trim().toLowerCase()
@@ -473,15 +705,12 @@ export function resolveRouteOrderOverrides(params: {
         ROUTE_10_OUTBOUND_DEBUG_STOP_CODES,
         stopsByNormalizedCode
       )
-      const inboundReport = resolveExplicitStopCodeSequence(
+      const inboundReport = resolveExplicitStopIdSequence(
         "10",
         "inbound",
         route,
-        [...ROUTE_10_OUTBOUND_DEBUG_STOP_CODES].reverse(),
-        stopsByNormalizedCode
-      )
-      inboundReport.warnings.push(
-        "Temporary debug-only inbound override: reversed outbound stop_code sequence"
+        ROUTE_10_INBOUND_STOP_IDS,
+        stopById
       )
       resolutionReports.push(outboundReport, inboundReport)
 
@@ -500,10 +729,123 @@ export function resolveRouteOrderOverrides(params: {
         setRouteDiagnostic(diagnostics, route.id, {
           order_source: "override",
           direction: "outbound",
-          warnings: [
-            ...outboundReport.warnings,
-            "Inbound debug direction available via reversed outbound stop_code order",
-          ],
+          warnings: [...outboundReport.warnings],
+        })
+      } else {
+        outboundReport.warnings.push(
+          `Resolved route has too few stops (${outboundIds.length}), falling back to DB order`
+        )
+      }
+
+      directionDebugByRouteId.set(route.id, {
+        route_id: route.id,
+        route_number: route.route_number,
+        outbound_stop_ids: outboundIds,
+        inbound_stop_ids: inboundIds,
+        source: "stop_code_override",
+        warnings: [...outboundReport.warnings, ...inboundReport.warnings],
+      })
+      continue
+    }
+
+    if (def.route_number === "12") {
+      const route = byDirection.outbound ?? byDirection.inbound
+      if (!route) continue
+
+      const outboundReport = resolveExplicitStopIdSequence(
+        "12",
+        "outbound",
+        route,
+        ROUTE_12_OUTBOUND_STOP_IDS,
+        stopById
+      )
+      resolutionReports.push(outboundReport)
+
+      const inboundTarget = byDirection.inbound ?? route
+      const inboundReport = resolveExplicitStopIdSequence(
+        "12",
+        "inbound",
+        inboundTarget,
+        ROUTE_12_INBOUND_STOP_IDS,
+        stopById
+      )
+      resolutionReports.push(inboundReport)
+
+      const outboundIds = dedupeKeepingOrder(
+        outboundReport,
+        outboundReport.route_id,
+        outboundReport.warnings
+      )
+      const inboundIds = dedupeKeepingOrder(
+        inboundReport,
+        inboundReport.route_id,
+        inboundReport.warnings
+      )
+
+      if (outboundIds.length >= MIN_RESOLVED_STOPS) {
+        orderedStopIdsByRouteId.set(route.id, outboundIds)
+        setRouteDiagnostic(diagnostics, route.id, {
+          order_source: "override",
+          direction: "outbound",
+          warnings: [...outboundReport.warnings],
+        })
+      } else {
+        outboundReport.warnings.push(
+          `Resolved route has too few stops (${outboundIds.length}), falling back to DB order`
+        )
+      }
+
+      directionDebugByRouteId.set(route.id, {
+        route_id: route.id,
+        route_number: route.route_number,
+        outbound_stop_ids: outboundIds,
+        inbound_stop_ids: inboundIds,
+        source: "stop_code_override",
+        warnings: [...outboundReport.warnings, ...inboundReport.warnings],
+      })
+      continue
+    }
+
+    if (def.route_number === "46") {
+      const route = byDirection.outbound ?? byDirection.inbound
+      if (!route) continue
+
+      const outboundReport = resolveExplicitStopIdSequence(
+        "46",
+        "outbound",
+        route,
+        ROUTE_46_OUTBOUND_STOP_IDS,
+        stopById
+      )
+      resolutionReports.push(outboundReport)
+
+      const inboundTarget = byDirection.inbound ?? route
+      const inboundReport = resolveExplicitStopIdSequence(
+        "46",
+        "inbound",
+        inboundTarget,
+        ROUTE_46_INBOUND_STOP_IDS,
+        stopById
+      )
+      resolutionReports.push(inboundReport)
+
+      const outboundIds = dedupeKeepingOrder(
+        outboundReport,
+        outboundReport.route_id,
+        outboundReport.warnings
+      )
+      const inboundIds = dedupeKeepingOrder(
+        inboundReport,
+        inboundReport.route_id,
+        inboundReport.warnings
+      )
+
+      if (outboundIds.length >= MIN_RESOLVED_STOPS) {
+        orderedStopIdsByRouteId.set(route.id, outboundIds)
+        setRouteDiagnostic(diagnostics, route.id, {
+          order_source: "override",
+          direction: "outbound",
+          warnings: [...outboundReport.warnings],
         })
       } else {
         outboundReport.warnings.push(
@@ -608,6 +950,52 @@ function buildStopsByNormalizedStopCode(
     m.set(key, list)
   }
   return m
+}
+
+function resolveExplicitStopIdSequence(
+  routeNumber: string,
+  direction: DirectionName,
+  route: RouteLike,
+  stopIds: string[],
+  stopById: Map<string, StopLike>
+): ResolutionReport {
+  const report: ResolutionReport = {
+    route_number: routeNumber,
+    direction,
+    route_id: route.id,
+    route_name: route.route_name,
+    source: "override",
+    trusted_total: stopIds.length,
+    resolved_total: 0,
+    exact_matches: [],
+    fuzzy_matches: [],
+    unresolved: [],
+    resolved_entries: [],
+    warnings: [],
+  }
+  for (const id of stopIds) {
+    const stop = stopById.get(id)
+    if (!stop) {
+      report.unresolved.push(id)
+      report.warnings.push(
+        `Missing bus_stops.id "${id}" for route ${routeNumber} ${direction}`
+      )
+      continue
+    }
+    report.exact_matches.push(id)
+    report.resolved_entries.push({
+      trusted: id,
+      stop_id: stop.id,
+      matched_name: stop.name,
+    })
+  }
+  report.resolved_total = report.resolved_entries.length
+  if (report.unresolved.length > 0) {
+    report.warnings.push(
+      `Route ${routeNumber} ${direction} is partially resolved: ${report.resolved_total}/${report.trusted_total}`
+    )
+  }
+  return report
 }
 
 function resolveExplicitStopCodeSequence(
