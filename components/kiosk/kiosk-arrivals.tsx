@@ -1,4 +1,5 @@
 import type { EtaPrediction, BusRoute } from "@/lib/types/database"
+import { formatKioskRouteLineName } from "@/lib/kiosk/format-route-display-name"
 import { Bus, Clock } from "lucide-react"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useI18n } from "@/components/i18n-provider"
@@ -87,7 +88,9 @@ export function KioskArrivals({ etas, loading, currentTime }: KioskArrivalsProps
                   </div>
                   <div>
                     <div className="text-lg font-semibold text-slate-900">
-                      {eta.route?.route_name || t("kiosk.unknownRoute")}
+                      {eta.route?.route_name
+                        ? formatKioskRouteLineName(eta.route.route_name)
+                        : t("kiosk.unknownRoute")}
                     </div>
                     <div className="text-sm text-slate-500">
                       {t("kiosk.bus")} {eta.bus?.bus_number || t("common.unknown")}
