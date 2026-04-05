@@ -43,7 +43,7 @@ interface EtaWithDetails extends EtaPrediction {
   route?: BusRoute
 }
 
-const ROUTES_TO_SHOW = new Set(["10", "12"])
+const ROUTES_TO_SHOW = new Set(["10", "12", "46"])
 const DEFAULT_ROUTE_NUMBERS = Array.from(ROUTES_TO_SHOW)
 
 const STOP_ROUTE_OVERRIDES_BY_CODE: Record<string, string[]> = {
@@ -265,7 +265,13 @@ export function KioskDisplay({ stops, defaultStopId, alerts }: KioskDisplayProps
           </div>
 
           <div className="flex w-full flex-1 flex-col gap-4 lg:flex-[2.2]">
-            <KioskMap stop={selectedStop} stopId={selectedStopId} />
+            <KioskMap
+              stop={selectedStop}
+              stopId={selectedStopId}
+              etas={etas}
+              relevantRouteNumbers={allowedRouteNumbers}
+              currentTime={currentTime}
+            />
 
             <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-[0_18px_60px_rgba(15,23,42,0.12)] lg:p-6">
               <KioskVoiceAssistant stopId={selectedStopId} stopName={selectedStop?.name} />
