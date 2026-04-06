@@ -4,8 +4,10 @@ import { KioskShell } from "@/components/kiosk/kiosk-shell"
 import { getServerLocale } from "@/lib/i18n/server"
 import { getLocalizedStopName } from "@/lib/i18n/stops"
 import {
-  ROUTE_10_NU_OUTBOUND_SIDE_STOP_ID,
-} from "@/lib/vehicles/route10-nu-demo-stops"
+  KIOSK_SELECTOR_EXTRA_STOP_IDS,
+  KIOSK_TEATR_ASTANA_OPERA_STOP_ID,
+} from "@/lib/kiosk/kiosk-selector-extra-stop-ids"
+import { ROUTE_10_NU_OUTBOUND_SIDE_STOP_ID } from "@/lib/vehicles/route10-nu-demo-stops"
 import { getEtaPayload } from "@/lib/vehicles/vehicle-service"
 
 export default async function KioskPage() {
@@ -22,13 +24,18 @@ export default async function KioskPage() {
     )
   }
 
+  const kioskStopOrFilter = [
+    "has_display.eq.true",
+    `stop_code.eq.${featuredOutboundNuStopCode}`,
+    ...KIOSK_SELECTOR_EXTRA_STOP_IDS.map((id) => `id.eq.${id}`),
+  ].join(",")
+
   const { data: stops } = await supabase
     .from("bus_stops")
     .select("*")
     .eq("is_active", true)
-    // Normally we show only stops configured for a physical display.
-    // For this specific stop, include it even if `has_display=false`.
-    .or(`has_display.eq.true,stop_code.eq.${featuredOutboundNuStopCode}`)
+    // Stops with a physical display, featured NU row, plus curated kiosk-only ids.
+    .or(kioskStopOrFilter)
     .order("name")
 
   const defaultStop =
@@ -40,6 +47,10 @@ export default async function KioskPage() {
       id: defaultStop?.id,
       stop_code: defaultStop?.stop_code,
       name: defaultStop?.name,
+    })
+    console.info("[kiosk] Teatr Astana Opera stop in picker", {
+      stop_id: KIOSK_TEATR_ASTANA_OPERA_STOP_ID,
+      in_list: (stops ?? []).some((s) => s.id === KIOSK_TEATR_ASTANA_OPERA_STOP_ID),
     })
   }
 
@@ -66,11 +77,10 @@ export default async function KioskPage() {
   return (
     <KioskShell>
       <KioskDisplay 
-        stops={(stops || []).map((s) =>
-          s.stop_code === featuredOutboundNuStopCode
-            ? { ...s, name: getLocalizedStopName(s.name, s.stop_code, locale, s) }
-            : s
-        )}
+        stops={(stops || []).map((s) => ({
+          ...s,
+          name: getLocalizedStopName(s.name, s.stop_code, locale, s, s.id),
+        }))}
         defaultStopId={defaultStop?.id}
         alerts={alerts || []}
       />

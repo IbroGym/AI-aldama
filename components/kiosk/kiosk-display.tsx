@@ -30,6 +30,7 @@ import {
   useSmoothedSimulationArrivals,
   type SmoothedEtaArrival,
 } from "@/hooks/use-smoothed-simulation-etas"
+import { KIOSK_TEATR_ASTANA_OPERA_STOP_ID } from "@/lib/kiosk/kiosk-selector-extra-stop-ids"
 import { ROUTE_10_NU_INBOUND_SIDE_BUS_STOP_ID } from "@/lib/vehicles/route10-nu-demo-stops"
 
 interface KioskDisplayProps {
@@ -53,6 +54,8 @@ const STOP_ROUTE_OVERRIDES_BY_CODE: Record<string, string[]> = {
 
 const STOP_ROUTE_OVERRIDES_BY_ID: Record<string, string[]> = {
   [ROUTE_10_NU_INBOUND_SIDE_BUS_STOP_ID]: ["10"],
+  /** Matches `ROUTE_12_INBOUND_STOP_IDS` + `ROUTE_46_INBOUND_STOP_IDS` in route-overrides. */
+  [KIOSK_TEATR_ASTANA_OPERA_STOP_ID]: ["12", "46"],
 }
 
 function getAllowedRouteNumbers(stop?: BusStop): string[] {
@@ -116,7 +119,9 @@ export function KioskDisplay({ stops, defaultStopId, alerts }: KioskDisplayProps
     console.info("[kiosk] selected stop (API uses bus_stops.id only)", {
       selectedStopId,
       selectedStopCode: row?.stop_code,
+      isTeatrAstanaOpera: selectedStopId === KIOSK_TEATR_ASTANA_OPERA_STOP_ID,
       inboundNuBusStopId: ROUTE_10_NU_INBOUND_SIDE_BUS_STOP_ID,
+      allowed_routes_preview: getAllowedRouteNumbers(row),
     })
   }, [isDev, selectedStopId, stops])
 
@@ -157,7 +162,7 @@ export function KioskDisplay({ stops, defaultStopId, alerts }: KioskDisplayProps
     () =>
       stops.map((s) => ({
         ...s,
-        name: getLocalizedStopName(s.name, s.stop_code, locale, s),
+        name: getLocalizedStopName(s.name, s.stop_code, locale, s, s.id),
       })),
     [stops, locale]
   )

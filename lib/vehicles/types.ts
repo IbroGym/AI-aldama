@@ -50,7 +50,7 @@ export interface VehicleDTO {
   lng: number
   heading_deg: number
   speed_kmh: number
-  /** Route 10 phase direction (outbound/inbound) when the two-phase model is active. */
+  /** Simulation leg (outbound/inbound) when bidirectional geometry + phase model is active. */
   direction?: "outbound" | "inbound"
   terminal_pause_active?: boolean
   distance_along_m?: number

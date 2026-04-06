@@ -592,7 +592,7 @@ export function TransitMapView() {
                 >
                   <Tooltip direction="top" offset={[0, -10]}>
                     {v.route_number}
-                    {v.route_number === "10" && v.direction && (
+                    {v.direction && (
                       <span className="ml-1 text-[11px] text-muted-foreground">
                         • {v.direction}
                         {v.distance_along_m != null

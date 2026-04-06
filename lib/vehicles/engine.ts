@@ -23,6 +23,18 @@ import type {
   TransitContextDTO,
 } from "./types"
 
+/** True when outbound/inbound polylines are both usable and not identical (open-path phase sim). */
+export function routeUsesBidirectionalPhaseSimulation(route: MapRouteDTO): boolean {
+  const o = route.coordinates_by_direction?.outbound
+  const i = route.coordinates_by_direction?.inbound
+  if (!o || !i || o.length < 2 || i.length < 2) return false
+  if (o.length !== i.length) return true
+  for (let k = 0; k < o.length; k++) {
+    if (o[k][0] !== i[k][0] || o[k][1] !== i[k][1]) return true
+  }
+  return false
+}
+
 export interface DbBusLite {
   id: string
   current_route_id: string | null
@@ -44,7 +56,7 @@ export interface VehicleRuntimeState {
   speed_mps: number
   speed_kmh: number
   coordinates: LatLng[]
-  // Route 10 demo: direction-aware two-phase movement.
+  // Routes with distinct outbound/inbound polylines (10, 12, 46, …).
   direction?: "outbound" | "inbound"
   terminal_pause_until_ms?: number | null
 }
@@ -59,7 +71,7 @@ type VehicleTrackState = {
 const vehicleTrackByKey = new Map<string, VehicleTrackState>()
 const MAX_INTEGRATION_DT_S = 6
 const JUMP_WARN_METERS = 250
-const ROUTE10_TERMINAL_DWELL_MS = 25_000
+const BIDIRECTIONAL_TERMINAL_DWELL_MS = 25_000
 
 export function strSeed(s: string): number {
   let h = 0
@@ -69,11 +81,19 @@ export function strSeed(s: string): number {
 
 export function routesServingStop(
   routes: MapRouteDTO[],
-  stopId: string
+  stopId: string,
+  routeDirectionDebug?: TransitContextDTO["route_direction_debug"],
 ): MapRouteDTO[] {
   return routes.filter((r) => {
     if (r.route_number === "10" && isRoute10NazarbaevDemoStopId(stopId)) {
       return true
+    }
+    if (routeUsesBidirectionalPhaseSimulation(r) && routeDirectionDebug) {
+      const dbg = routeDirectionDebug.find((d) => d.route_id === r.id)
+      if (dbg) {
+        if (dbg.outbound_stop_ids.includes(stopId)) return true
+        if (dbg.inbound_stop_ids.includes(stopId)) return true
+      }
     }
     return r.stop_ids_ordered.includes(stopId)
   })
@@ -234,7 +254,7 @@ export function computeVehicleStates(
   const seenKeys = new Set<string>()
 
   for (const route of transit.routes) {
-    if (route.route_number === "10") {
+    if (routeUsesBidirectionalPhaseSimulation(route)) {
       const outboundCoords: LatLng[] = (
         route.coordinates_by_direction?.outbound ?? route.coordinates
       ).map(([lat, lng]) => ({ lat, lng }))
@@ -268,12 +288,12 @@ export function computeVehicleStates(
 
         const outTravel_s = outTotalLen / Math.max(0.1, baseSpeed)
         const inTravel_s = inTotalLen / Math.max(0.1, baseSpeed)
-        const dwell_s = ROUTE10_TERMINAL_DWELL_MS / 1000
+        const dwell_s = BIDIRECTIONAL_TERMINAL_DWELL_MS / 1000
         const cycle_s = outTravel_s + inTravel_s + 2 * dwell_s
 
         if (!previous) {
           const phaseOffset_s = ((seed % 10_000) / 10_000) * cycle_s
-            const t = (((nowMs / 1000) * simulationSpeedMultiplier + phaseOffset_s) % cycle_s) as number
+          const t = (((nowMs / 1000) * simulationSpeedMultiplier + phaseOffset_s) % cycle_s) as number
 
           if (t < outTravel_s) {
             direction = "outbound"
@@ -321,7 +341,7 @@ export function computeVehicleStates(
             terminal_pause_until_ms = null
             distance_along_m = 0
             console.info(
-              `[route10-phase] vehicle_id=${id} ${prevDirection} -> ${direction}`,
+              `[route-phase] route=${route.route_number} vehicle_id=${id} ${prevDirection} -> ${direction}`,
             )
             // Reset time so we don't advance during this tick after a phase switch.
             vehicleTrackByKey.set(trackKey, {
@@ -346,7 +366,7 @@ export function computeVehicleStates(
 
             if (distance_along_m >= totalLen) {
               terminal_pause_until_ms =
-                nowMs + ROUTE10_TERMINAL_DWELL_MS / simulationSpeedMultiplier
+                nowMs + BIDIRECTIONAL_TERMINAL_DWELL_MS / simulationSpeedMultiplier
               distance_along_m = totalLen
             }
 
@@ -506,24 +526,25 @@ export function stateServesStop(
   route: MapRouteDTO,
   stopId: string
 ): boolean {
-  if (route.route_number !== "10") {
-    return route.stop_ids_ordered.includes(stopId)
+  if (route.route_number === "10") {
+    if (isRoute10NuInboundSideStopId(stopId)) {
+      return (state.direction ?? "outbound") === "inbound"
+    }
+    if (isRoute10NuOutboundSideStopId(stopId)) {
+      return (state.direction ?? "outbound") === "outbound"
+    }
   }
 
-  if (isRoute10NuInboundSideStopId(stopId)) {
-    return (state.direction ?? "outbound") === "inbound"
-  }
-  if (isRoute10NuOutboundSideStopId(stopId)) {
-    return (state.direction ?? "outbound") === "outbound"
+  if (routeUsesBidirectionalPhaseSimulation(route)) {
+    const dbg = transit.route_direction_debug?.find(
+      (d) => d.route_id === state.route_id,
+    )
+    const dir = state.direction ?? "outbound"
+    const ids =
+      dir === "outbound" ? dbg?.outbound_stop_ids : dbg?.inbound_stop_ids
+    if (ids && ids.length) return ids.includes(stopId)
   }
 
-  const dbg = transit.route_direction_debug?.find(
-    (d) => d.route_id === state.route_id,
-  )
-  const dir = state.direction ?? "outbound"
-  const ids =
-    dir === "outbound" ? dbg?.outbound_stop_ids : dbg?.inbound_stop_ids
-  if (ids && ids.length) return ids.includes(stopId)
   return route.stop_ids_ordered.includes(stopId)
 }
 
@@ -564,34 +585,42 @@ export function buildArrivalsForStop(
       continue
     }
 
-    if (route.route_number === "10") {
+    const phaseRoute = routeUsesBidirectionalPhaseSimulation(route)
+
+    if (phaseRoute) {
       const paused =
         state.terminal_pause_until_ms != null &&
         serverTimeMs < state.terminal_pause_until_ms
       if (paused) {
         trace(
-          `vehicle_id=${state.id} route_id=${state.route_id} route_number=10 direction=${state.direction ?? "n/a"} distance_along_m=${Math.round(state.distance_along_m)} excluded=terminal_dwell`,
+          `vehicle_id=${state.id} route_id=${state.route_id} route_number=${route.route_number} direction=${state.direction ?? "n/a"} distance_along_m=${Math.round(state.distance_along_m)} excluded=terminal_dwell`,
         )
         continue
       }
     }
 
-    const eta =
-      route.route_number === "10"
-        ? etaMinutesAndConfidenceNoWrap(
-            state.coordinates,
-            state.distance_along_m,
-            state.speed_mps,
-            { lat: stop.lat, lng: stop.lng },
-          )
-        : etaMinutesAndConfidence(
-            state.coordinates,
-            state.distance_along_m,
-            state.speed_mps,
-            { lat: stop.lat, lng: stop.lng },
-          )
+    const eta = phaseRoute
+      ? etaMinutesAndConfidenceNoWrap(
+          state.coordinates,
+          state.distance_along_m,
+          state.speed_mps,
+          { lat: stop.lat, lng: stop.lng },
+        )
+      : etaMinutesAndConfidence(
+          state.coordinates,
+          state.distance_along_m,
+          state.speed_mps,
+          { lat: stop.lat, lng: stop.lng },
+        )
 
-    if (route.route_number !== "10") {
+    if (phaseRoute) {
+      if (!Number.isFinite(eta.forward_m)) {
+        trace(
+          `vehicle_id=${state.id} route_id=${state.route_id} route_number=${route.route_number} direction=${state.direction ?? "n/a"} distance_along_m=${Math.round(state.distance_along_m)} excluded=stop_behind_vehicle`,
+        )
+        continue
+      }
+    } else {
       // Wrap-around guard for loop routes:
       // after passing the stop we temporarily drop this vehicle instead of
       // showing "next full loop ETA" as the immediate arrival.
@@ -603,11 +632,6 @@ export function buildArrivalsForStop(
         )
         continue
       }
-    } else if (!Number.isFinite(eta.forward_m)) {
-      trace(
-        `vehicle_id=${state.id} route_id=${state.route_id} route_number=10 direction=${state.direction ?? "n/a"} distance_along_m=${Math.round(state.distance_along_m)} excluded=stop_behind_vehicle`,
-      )
-      continue
     }
 
     // Kiosk/display horizon: hide very far next-loop arrivals.

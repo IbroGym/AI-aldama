@@ -134,6 +134,7 @@ export function KioskMap({
         {stop && stopId ? (
           <>
             <MapContainer
+              key={stopId ?? "none"}
               center={center}
               zoom={14}
               scrollWheelZoom={false}

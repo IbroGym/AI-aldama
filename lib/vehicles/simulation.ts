@@ -1,6 +1,7 @@
 import {
   etaMinutesAndConfidence,
   etaMinutesAndConfidenceNoWrap,
+  routeUsesBidirectionalPhaseSimulation,
   routesServingStop,
   stateServesStop,
   type VehicleRuntimeState,
@@ -27,14 +28,22 @@ export function vehiclesDtoFromStates(
 
   const stopById = new Map(transit.stops.map((s) => [s.id, s]))
   const highlighted_route_ids = focusStopId
-    ? routesServingStop(transit.routes, focusStopId).map((r) => r.id)
+    ? routesServingStop(
+        transit.routes,
+        focusStopId,
+        transit.route_direction_debug,
+      ).map((r) => r.id)
     : []
 
   let filtered = states
 
   if (filterStopOnly && focusStopId) {
     const serving = new Set(
-      routesServingStop(transit.routes, focusStopId).map((r) => r.id)
+      routesServingStop(
+        transit.routes,
+        focusStopId,
+        transit.route_direction_debug,
+      ).map((r) => r.id)
     )
     filtered = states.filter((s) => serving.has(s.route_id))
   }
@@ -55,25 +64,25 @@ export function vehiclesDtoFromStates(
 
     if (route && focusStop && servesFocus) {
       if (state.speed_mps > 0) {
-        const e =
-          route.route_number === "10"
-            ? etaMinutesAndConfidenceNoWrap(
-                state.coordinates,
-                state.distance_along_m,
-                state.speed_mps,
-                { lat: focusStop.lat, lng: focusStop.lng },
-              )
-            : etaMinutesAndConfidence(
-                state.coordinates,
-                state.distance_along_m,
-                state.speed_mps,
-                { lat: focusStop.lat, lng: focusStop.lng },
-              )
+        const phaseRoute = routeUsesBidirectionalPhaseSimulation(route)
+        const e = phaseRoute
+          ? etaMinutesAndConfidenceNoWrap(
+              state.coordinates,
+              state.distance_along_m,
+              state.speed_mps,
+              { lat: focusStop.lat, lng: focusStop.lng },
+            )
+          : etaMinutesAndConfidence(
+              state.coordinates,
+              state.distance_along_m,
+              state.speed_mps,
+              { lat: focusStop.lat, lng: focusStop.lng },
+            )
 
         const likelyJustPassed =
-          route.route_number !== "10"
-            ? e.forward_m > state.route_total_m * 0.85 && e.lateral_m < 45
-            : false
+          !phaseRoute &&
+          e.forward_m > state.route_total_m * 0.85 &&
+          e.lateral_m < 45
 
         if (!likelyJustPassed && e.eta_minutes <= 35) {
           eta_minutes = e.eta_minutes
