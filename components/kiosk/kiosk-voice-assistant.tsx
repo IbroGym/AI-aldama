@@ -56,6 +56,12 @@ function getSpeechRecognition(): (new () => SpeechRecognitionInstance) | null {
 interface KioskVoiceAssistantProps {
   stopId?: string
   stopName?: string
+  contextArrivals?: Array<{
+    routeNumber: string
+    routeName: string
+    busNumber: string
+    minutesAway: number
+  }>
 }
 
 interface Message {
@@ -63,7 +69,11 @@ interface Message {
   content: string
 }
 
-export function KioskVoiceAssistant({ stopId, stopName }: KioskVoiceAssistantProps) {
+export function KioskVoiceAssistant({
+  stopId,
+  stopName,
+  contextArrivals = [],
+}: KioskVoiceAssistantProps) {
   const { locale, t } = useI18n()
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState("")
@@ -78,6 +88,18 @@ export function KioskVoiceAssistant({ stopId, stopName }: KioskVoiceAssistantPro
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [messages])
+
+  // Reset assistant session when kiosk stop changes.
+  useEffect(() => {
+    setMessages([])
+    setInput("")
+    setIsLoading(false)
+    setIsListening(false)
+    recognitionRef.current?.stop()
+    if ("speechSynthesis" in window) {
+      window.speechSynthesis.cancel()
+    }
+  }, [stopId])
 
   const speak = useCallback((text: string) => {
     if ("speechSynthesis" in window) {
@@ -112,6 +134,7 @@ export function KioskVoiceAssistant({ stopId, stopName }: KioskVoiceAssistantPro
           stopId,
           stopName,
           locale,
+          contextArrivals,
         }),
       })
 
@@ -133,7 +156,7 @@ export function KioskVoiceAssistant({ stopId, stopName }: KioskVoiceAssistantPro
     } finally {
       setIsLoading(false)
     }
-  }, [input, isLoading, stopId, stopName, speak])
+  }, [input, isLoading, stopId, stopName, speak, locale, contextArrivals, t])
 
   // Initialize speech recognition
   useEffect(() => {

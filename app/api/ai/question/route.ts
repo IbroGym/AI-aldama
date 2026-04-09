@@ -2,11 +2,191 @@ import { generateText, tool } from "ai"
 import { z } from "zod"
 import { createClient } from "@/lib/supabase/server"
 import { isLocale, type Locale } from "@/lib/i18n/config"
+import { getEtaPayload } from "@/lib/vehicles/vehicle-service"
+import {
+  ROUTE_10_INBOUND_STOP_IDS,
+  ROUTE_10_OUTBOUND_DEBUG_STOP_CODES,
+  ROUTE_12_INBOUND_STOP_IDS,
+  ROUTE_12_OUTBOUND_STOP_IDS,
+  ROUTE_46_INBOUND_STOP_IDS,
+  ROUTE_46_OUTBOUND_STOP_IDS,
+} from "@/lib/vehicles/route-overrides"
+import {
+  ROUTE_10_NU_INBOUND_SIDE_BUS_STOP_ID,
+  ROUTE_10_NU_OUTBOUND_SIDE_STOP_ID,
+} from "@/lib/vehicles/route10-nu-demo-stops"
+
+const CANONICAL_DESTINATIONS = {
+  airport: {
+    id: "8c4ad112-e945-4ebf-ace1-1ac761470bfc",
+    synonyms: ["аэропорт", "международный аэропорт", "airport", "terminal"],
+  },
+  railwayStation: {
+    id: "a9adbb0f-d9f8-43d7-9084-dc71cf757017",
+    synonyms: [
+      "жд вокзал",
+      "вокзал",
+      "железнодорожный вокзал",
+      "railway station",
+      "train station",
+    ],
+  },
+  martialPalace: {
+    // "Дворец единоборств им. Жаксылыка Ушкемпирова"
+    id: "c885bb33-9730-4071-9429-8ad8e56f4a7e",
+    synonyms: [
+      "дворец единоборств",
+      "ushkempirov",
+      "martial arts palace",
+      "martial palace",
+    ],
+  },
+} as const
+
+const AIRPORT_STOP_ID = CANONICAL_DESTINATIONS.airport.id
+const RAILWAY_STOP_ID = CANONICAL_DESTINATIONS.railwayStation.id
+const MARTIAL_PALACE_STOP_ID = CANONICAL_DESTINATIONS.martialPalace.id
+
+const OPPOSITE_STOP_BY_ID: Record<string, string> = {
+  [ROUTE_10_NU_OUTBOUND_SIDE_STOP_ID]: ROUTE_10_NU_INBOUND_SIDE_BUS_STOP_ID,
+  [ROUTE_10_NU_INBOUND_SIDE_BUS_STOP_ID]: ROUTE_10_NU_OUTBOUND_SIDE_STOP_ID,
+}
+const BUS_PREFIX_ROUTES = new Set(["10", "12", "46"])
+
+function formatMinutes(locale: Locale, minutes: number): string {
+  if (locale === "ru") return `${minutes} минут`
+  if (locale === "kk") return `${minutes} минут`
+  return `${minutes} minutes`
+}
+
+function formatRouteLabel(locale: Locale, routeRaw?: string | null): string {
+  const normalized = normalizeRouteNumber(routeRaw)
+  const route = normalized ?? routeRaw ?? ""
+  if (!route) return locale === "en" ? "route" : "маршрут"
+  if (BUS_PREFIX_ROUTES.has(route)) {
+    return locale === "en" ? `Bus ${route}` : `Автобус ${route}`
+  }
+  return locale === "en" ? `Route ${route}` : `Маршрут ${route}`
+}
+
+function normalizeRouteDisplayName(routeName?: string | null): string {
+  if (!routeName) return ""
+  const parts = routeName
+    .split(/\s*[-–—]\s*/g)
+    .map((p) => p.trim())
+    .filter(Boolean)
+  if (parts.length >= 3) {
+    const first = parts[0].toLowerCase()
+    const last = parts[parts.length - 1].toLowerCase()
+    if (first === last) {
+      parts.pop()
+    }
+  }
+  return parts.join(" - ")
+}
+
+function detectLocaleFromQuestion(
+  questionText: string,
+  fallback: Locale
+): Locale {
+  const lower = questionText.toLowerCase()
+  // Kazakh-specific letters give the strongest signal.
+  if (/[әғқңөүұһәі]/i.test(questionText)) return "kk"
+  // Common Russian words.
+  if (/\b(как|когда|сколько|где|маршрут|автобус|остановк)/i.test(lower)) {
+    return "ru"
+  }
+  // Any Cyrillic text (without Kazakh-specific letters above) defaults to Russian.
+  if (/[а-яё]/i.test(questionText)) return "ru"
+  // If text is mostly Latin, assume English.
+  if (/[a-z]/i.test(questionText) && !/[а-яё]/i.test(questionText)) {
+    return "en"
+  }
+  return fallback
+}
+
+function normalizeRouteNumber(raw?: string | null): string | null {
+  if (!raw) return null
+  const trimmed = raw.trim().toLowerCase()
+  const normalized = trimmed
+    .replace(/^route\s*/i, "")
+    .replace(/^r\s*/i, "")
+    .replace(/^маршрут\s*/i, "")
+  return normalized || null
+}
+
+function extractRouteNumber(questionText: string): string | null {
+  const lower = questionText.toLowerCase()
+  const routeMatch =
+    lower.match(/route\s*([a-z]?\d+)/i) ||
+    lower.match(/\bмаршрут\s*([a-z]?\d+)\b/i) ||
+    lower.match(/\bавтобус\s*([a-z]?\d+)\b/i) ||
+    lower.match(/\b([a-z]?\d+)\b/)
+
+  return normalizeRouteNumber(routeMatch?.[1] ?? null)
+}
+
+function getDestinationKey(
+  questionText: string
+): "airport" | "railwayStation" | "martialPalace" | null {
+  const lower = questionText.toLowerCase()
+  if (CANONICAL_DESTINATIONS.airport.synonyms.some((s) => lower.includes(s))) {
+    return "airport"
+  }
+  if (
+    CANONICAL_DESTINATIONS.railwayStation.synonyms.some((s) =>
+      lower.includes(s)
+    )
+  ) {
+    return "railwayStation"
+  }
+  if (
+    CANONICAL_DESTINATIONS.martialPalace.synonyms.some((s) =>
+      lower.includes(s)
+    )
+  ) {
+    return "martialPalace"
+  }
+  return null
+}
+
+function destinationNameTokens(
+  key: "airport" | "railwayStation" | "martialPalace"
+): string[] {
+  if (key === "airport") {
+    return ["airport", "аэропорт", "әуежай", "terminal"]
+  }
+  if (key === "martialPalace") {
+    return ["единоборств", "ушкемп", "martial", "ushkemp"]
+  }
+  return ["railway", "train station", "rail station", "вокзал", "ж/д", "теміржол"]
+}
+
+const DIRECTIONAL_ROUTE_STOPS: Record<
+  string,
+  { outbound: string[]; inbound: string[] }
+> = {
+  "10": {
+    // Route 10 outbound list is sourced from debug stop codes;
+    // include canonical terminal ids so destination checks work.
+    outbound: [...ROUTE_10_OUTBOUND_DEBUG_STOP_CODES, AIRPORT_STOP_ID],
+    inbound: ROUTE_10_INBOUND_STOP_IDS,
+  },
+  "12": {
+    outbound: ROUTE_12_OUTBOUND_STOP_IDS,
+    inbound: ROUTE_12_INBOUND_STOP_IDS,
+  },
+  "46": {
+    outbound: ROUTE_46_OUTBOUND_STOP_IDS,
+    inbound: [...ROUTE_46_INBOUND_STOP_IDS, RAILWAY_STOP_ID],
+  },
+}
 
 export async function POST(req: Request) {
   const startTime = Date.now()
-  const { question, stopId, stopName, locale } = await req.json()
-  const responseLocale: Locale = isLocale(locale) ? locale : "kk"
+  const { question, stopId, stopName, locale, contextArrivals } = await req.json()
+  const uiLocale: Locale = isLocale(locale) ? locale : "kk"
+  const responseLocale: Locale = detectLocaleFromQuestion(question, uiLocale)
 
   if (!question) {
     return Response.json({ error: "Question is required" }, { status: 400 })
@@ -15,37 +195,64 @@ export async function POST(req: Request) {
   const supabase = await createClient()
 
   // Fetch context data for the AI
-  const [
-    { data: routes },
-    { data: stops },
-    { data: etas },
-    { data: alerts },
-  ] = await Promise.all([
-    supabase.from("bus_routes").select("*").eq("is_active", true),
-    supabase.from("bus_stops").select("*").eq("is_active", true),
-    stopId
-      ? supabase
-          .from("eta_predictions")
-          .select("*, bus:buses(bus_number), route:bus_routes(*)")
-          .eq("stop_id", stopId)
-          .gte("predicted_arrival", new Date().toISOString())
-          .order("predicted_arrival", { ascending: true })
-          .limit(5)
-      : Promise.resolve({ data: [] }),
-    supabase.from("alerts").select("*").eq("is_active", true),
-  ])
+  const [{ data: routes }, { data: stops }, { data: alerts }, { data: routeStops }, etaPayload] =
+    await Promise.all([
+      supabase.from("bus_routes").select("*").eq("is_active", true),
+      supabase.from("bus_stops").select("*").eq("is_active", true),
+      supabase.from("alerts").select("*").eq("is_active", true),
+      supabase
+        .from("route_stops")
+        .select("route_id, stop_id, stop_sequence"),
+      stopId
+        ? getEtaPayload(supabase, stopId, false, false)
+        : Promise.resolve(null),
+    ])
 
-  // Build context for the AI
   const currentStop = stops?.find((s) => s.id === stopId)
-  const upcomingArrivals = etas?.map((eta) => ({
-    route: eta.route?.route_number,
-    routeName: eta.route?.route_name,
-    busNumber: eta.bus?.bus_number,
-    arrivalTime: eta.predicted_arrival,
-    minutesAway: Math.round(
-      (new Date(eta.predicted_arrival).getTime() - Date.now()) / 60000
-    ),
+  const currentStopDisplayName =
+    responseLocale === "ru"
+      ? currentStop?.name_ru || currentStop?.name
+      : responseLocale === "kk"
+        ? currentStop?.name_kk || currentStop?.name
+        : currentStop?.name_en || currentStop?.name
+  const activeRoutes = routes ?? []
+  const activeRouteStops = routeStops ?? []
+
+  // Use the same ETA source as /api/eta (simulation snapshot)
+  const apiUpcomingArrivals = etaPayload?.arrivals?.map((eta) => ({
+    route: eta.route_number,
+    routeName: normalizeRouteDisplayName(eta.route_name),
+    busNumber: eta.bus_label,
+    arrivalTime: eta.predicted_arrival_iso,
+    // Use the exact ETA minutes from /api/eta to stay in sync with kiosk board.
+    minutesAway: eta.eta_minutes,
   }))
+
+  const safeContextArrivals = Array.isArray(contextArrivals)
+    ? contextArrivals
+        .filter(
+          (a) =>
+            a &&
+            typeof a.routeNumber === "string" &&
+            typeof a.minutesAway === "number"
+        )
+        .map((a) => ({
+          route: a.routeNumber,
+          routeName:
+            typeof a.routeName === "string"
+              ? normalizeRouteDisplayName(a.routeName)
+              : "",
+          busNumber: typeof a.busNumber === "string" ? a.busNumber : "",
+          arrivalTime: null as string | null,
+          minutesAway: Math.max(0, Math.round(a.minutesAway)),
+        }))
+    : []
+
+  // Prefer the exact arrivals currently shown in the kiosk UI to avoid drift.
+  const upcomingArrivals = (safeContextArrivals.length > 0
+    ? safeContextArrivals
+    : apiUpcomingArrivals
+  )?.slice().sort((a, b) => a.minutesAway - b.minutesAway)
 
   const languageInstruction =
     responseLocale === "ru"
@@ -54,15 +261,33 @@ export async function POST(req: Request) {
         ? "Respond in English."
         : "Respond in Kazakh."
 
+  const domainFallback =
+    responseLocale === "ru"
+      ? "Я могу помочь с автобусами, маршрутами и прибытием на этой остановке."
+      : responseLocale === "en"
+        ? "I can help with buses, routes, and arrivals at this stop."
+        : "Мен осы аялдамадағы автобустар, маршруттар және келу уақыты туралы көмектесе аламын."
+
+  const insufficientDataFallback =
+    responseLocale === "ru"
+      ? "Сейчас недостаточно данных для точного ответа по этой остановке."
+      : responseLocale === "en"
+        ? "There is not enough data right now for a precise answer at this stop."
+        : "Қазір бұл аялдама бойынша нақты жауапқа дерек жеткіліксіз."
+
   const systemPrompt = `You are a helpful transit assistant at a bus stop kiosk. You help passengers with information about bus arrivals, routes, and schedules.
 ${languageInstruction}
 
 Current Context:
-- Current Stop: ${stopName || currentStop?.name || "Unknown"}
+- Current Stop: ${currentStopDisplayName || stopName || "Unknown"}
 - Stop Code: ${currentStop?.stop_code || "Unknown"}
 - Current Time: ${new Date().toLocaleTimeString()}
 
-Available Routes: ${routes?.map((r) => `${r.route_number} (${r.route_name})`).join(", ") || "None"}
+Available Routes: ${
+  routes
+    ?.map((r) => `${r.route_number} (${normalizeRouteDisplayName(r.route_name)})`)
+    .join(", ") || "None"
+}
 
 Upcoming Arrivals at this Stop:
 ${
@@ -83,15 +308,135 @@ ${
     : "No active alerts"
 }
 
-Instructions:
-- Be concise and helpful
-- Provide specific arrival times when asked about next buses
-- If asked about routes you don't have info for, say so politely
-- For complex route planning, suggest checking the main transit app
-- Always be friendly and professional`
+Rules (strict):
+- You are a stop-based transport assistant for the CURRENT kiosk stop only.
+- Source of truth for ETA is kiosk ETA feed (/api/eta via current context).
+- Use structured context/tool data first; do not invent missing values.
+- Never guess arrival times, route numbers, travel times, transfers, or directions.
+- If data is missing, state it clearly and briefly.
+- Do not ask follow-up questions if kiosk context already makes the answer clear.
+- If boarding is required from opposite side, state it explicitly.
+- Keep answers short: 1-2 sentences, practical, no extra explanations.
+- Answer only within transit domain for this stop.
+- If question is outside domain, respond exactly: "${domainFallback}"
+- If data is insufficient for a precise transit answer, prefer: "${insufficientDataFallback}"`
+
+  const getDirectRoutesToDestination = (destinationStopId: string) => {
+    if (!stopId || !activeRouteStops.length || !activeRoutes.length) return []
+    const routeIndex = new Map<string, { fromSeq?: number; toSeq?: number }>()
+
+    for (const row of activeRouteStops) {
+      const entry = routeIndex.get(row.route_id) ?? {}
+      if (row.stop_id === stopId) entry.fromSeq = row.stop_sequence
+      if (row.stop_id === destinationStopId) entry.toSeq = row.stop_sequence
+      routeIndex.set(row.route_id, entry)
+    }
+
+    const directRouteIds = Array.from(routeIndex.entries())
+      .filter(([, v]) => v.fromSeq != null && v.toSeq != null && v.toSeq > v.fromSeq)
+      .map(([routeId]) => routeId)
+
+    return activeRoutes.filter((r) => directRouteIds.includes(r.id))
+  }
+
+  const getDirectionalRoutesToDestination = (destinationStopId: string) => {
+    if (!stopId || !activeRoutes.length) {
+      return { sameSide: [] as typeof activeRoutes, oppositeSide: [] as typeof activeRoutes }
+    }
+
+    const sameSideRouteNumbers = new Set<string>()
+    const oppositeSideRouteNumbers = new Set<string>()
+
+    for (const route of activeRoutes) {
+      const routeNumber = normalizeRouteNumber(route.route_number)
+      if (!routeNumber) continue
+      const directional = DIRECTIONAL_ROUTE_STOPS[routeNumber]
+      if (!directional) continue
+
+      const outFrom = directional.outbound.indexOf(stopId)
+      const outTo = directional.outbound.indexOf(destinationStopId)
+      const inFrom = directional.inbound.indexOf(stopId)
+      const inTo = directional.inbound.indexOf(destinationStopId)
+
+      if (outFrom >= 0 && outTo >= 0 && outFrom < outTo) {
+        sameSideRouteNumbers.add(routeNumber)
+      } else if (outFrom >= 0 && outTo >= 0 && outFrom > outTo) {
+        oppositeSideRouteNumbers.add(routeNumber)
+      } else if (inFrom >= 0 && inTo >= 0 && inFrom < inTo) {
+        sameSideRouteNumbers.add(routeNumber)
+      } else if (inFrom >= 0 && inTo >= 0 && inFrom > inTo) {
+        oppositeSideRouteNumbers.add(routeNumber)
+      } else if (outFrom >= 0 && inTo >= 0) {
+        oppositeSideRouteNumbers.add(routeNumber)
+      } else if (inFrom >= 0 && outTo >= 0) {
+        oppositeSideRouteNumbers.add(routeNumber)
+      }
+    }
+
+    return {
+      sameSide: activeRoutes.filter((r) =>
+        sameSideRouteNumbers.has(normalizeRouteNumber(r.route_number) ?? "")
+      ),
+      oppositeSide: activeRoutes.filter((r) =>
+        oppositeSideRouteNumbers.has(normalizeRouteNumber(r.route_number) ?? "")
+      ),
+    }
+  }
+
+  const getDestinationServingRouteNumbers = (destinationStopId: string): Set<string> => {
+    const serving = new Set<string>()
+    for (const [routeNumber, directional] of Object.entries(DIRECTIONAL_ROUTE_STOPS)) {
+      if (
+        directional.outbound.includes(destinationStopId) ||
+        directional.inbound.includes(destinationStopId)
+      ) {
+        serving.add(routeNumber)
+      }
+    }
+    return serving
+  }
+
+  const inferSameSideRouteFromArrivals = (
+    destinationKey: "airport" | "railwayStation" | "martialPalace",
+    destinationStopId: string
+  ) => {
+    const destinationServing = getDestinationServingRouteNumbers(destinationStopId)
+    const tokens = destinationNameTokens(destinationKey)
+    const matches = (upcomingArrivals ?? []).filter((a) => {
+      const routeNum = normalizeRouteNumber(a.route) ?? ""
+      const byRouteMembership = destinationServing.has(routeNum)
+      const routeName = (a.routeName ?? "").toLowerCase()
+      const byRouteName = tokens.some((t) => routeName.includes(t))
+      return byRouteMembership || byRouteName
+    })
+    if (!matches.length) return null
+    return matches
+      .slice()
+      .sort((a, b) => a.minutesAway - b.minutesAway)[0]
+  }
+
+  const getNextUpcomingForRouteNumbers = (routeNumbers: Set<string>) => {
+    const matches = (upcomingArrivals ?? []).filter((a) =>
+      routeNumbers.has(normalizeRouteNumber(a.route) ?? "")
+    )
+    if (!matches.length) return null
+    return matches.slice().sort((a, b) => a.minutesAway - b.minutesAway)[0]
+  }
+
+  const getNextUpcomingAtOppositeStopForRoutes = async (routeNumbers: Set<string>) => {
+    if (!stopId) return null
+    const oppositeStopId = OPPOSITE_STOP_BY_ID[stopId]
+    if (!oppositeStopId) return null
+    const oppositeEta = await getEtaPayload(supabase, oppositeStopId, false, false)
+    const matches = oppositeEta.arrivals.filter((a) =>
+      routeNumbers.has(normalizeRouteNumber(a.route_number) ?? "")
+    )
+    if (!matches.length) return null
+    return matches.slice().sort((a, b) => a.eta_minutes - b.eta_minutes)[0]
+  }
 
   // Rule-based fallback function for when AI is unavailable
-  const generateFallbackAnswer = (): string => {
+  const generateFallbackAnswer = async (): Promise<string> => {
     const tx = {
       nextBus:
         responseLocale === "ru"
@@ -117,38 +462,241 @@ Instructions:
           : responseLocale === "en"
             ? "I'm here to help with bus arrival times and route information."
             : "Автобус келуі мен маршрут туралы көмектесемін.",
+      insufficient:
+        insufficientDataFallback,
     }
     const questionLower = question.toLowerCase()
-    
-    // Next arrival queries
-    if (questionLower.includes("next") || questionLower.includes("when")) {
+
+    const destinationKey = getDestinationKey(question)
+    const destinationId = destinationKey
+      ? CANONICAL_DESTINATIONS[destinationKey].id
+      : null
+    const routeNumber = extractRouteNumber(question)
+
+    if (destinationKey && destinationId && stopId) {
+      const directional = getDirectionalRoutesToDestination(destinationId)
+      const hasDirectionalMatch =
+        directional.sameSide.length > 0 || directional.oppositeSide.length > 0
+      const directRoutes =
+        directional.sameSide.length > 0
+          ? directional.sameSide
+          : hasDirectionalMatch
+            ? []
+            : getDirectRoutesToDestination(destinationId)
+      const inferredFromArrivals = inferSameSideRouteFromArrivals(
+        destinationKey,
+        destinationId
+      )
+      const destinationEta = await getEtaPayload(supabase, destinationId, false, false)
+      const directRouteNumbers = new Set<string>(
+        directRoutes
+          .map((r) => normalizeRouteNumber(r.route_number))
+          .filter((v): v is string => Boolean(v))
+      )
+      const nextAtDestination = destinationEta.arrivals.find((a) =>
+        directRouteNumbers.has(normalizeRouteNumber(a.route_number) ?? "")
+      )
+      const destinationLabel =
+        destinationKey === "airport"
+          ? responseLocale === "ru"
+            ? "аэропорта"
+            : responseLocale === "en"
+              ? "airport"
+              : "әуежай"
+          : destinationKey === "martialPalace"
+            ? responseLocale === "ru"
+              ? "Дворца единоборств"
+              : responseLocale === "en"
+                ? "Dvorets edinoborstv"
+                : "Жекпе-жек сарайы"
+            : responseLocale === "ru"
+              ? "ЖД вокзала"
+              : responseLocale === "en"
+                ? "railway station"
+                : "теміржол вокзалы"
+
+      if (directional.oppositeSide.length > 0 && directional.sameSide.length === 0) {
+        const oppositeRouteSet = new Set<string>(
+          directional.oppositeSide
+            .map((r) => normalizeRouteNumber(r.route_number))
+            .filter((v): v is string => Boolean(v))
+        )
+        const oppositeRouteList = directional.oppositeSide
+          .map((r) => r.route_number)
+          .join(", ")
+        const oppositeArrival = await getNextUpcomingAtOppositeStopForRoutes(
+          oppositeRouteSet
+        )
+        if (oppositeArrival) {
+          return responseLocale === "ru"
+            ? `Эта остановка в противоположном направлении. Перейдите на встречную остановку и сядьте на автобус ${oppositeArrival.route_number}. Ближайший автобус через ${oppositeArrival.eta_minutes} мин.`
+            : responseLocale === "en"
+              ? `This destination is in the opposite direction. Cross to the opposite stop and take bus ${oppositeArrival.route_number}. The next bus is in ${oppositeArrival.eta_minutes} minutes.`
+              : `Бұл бағыт қарсы жақта. Қарсы беттегі аялдамаға өтіп, ${oppositeArrival.route_number} автобусына отырыңыз. Ең жақын автобус ${oppositeArrival.eta_minutes} минуттан кейін келеді.`
+        }
+        return responseLocale === "ru"
+          ? `Эта остановка в противоположном направлении. Перейдите на встречную остановку и сядьте на автобус ${oppositeRouteList}, однако ближайших прибытий сейчас нет.`
+          : responseLocale === "en"
+            ? `This destination is in the opposite direction. Cross to the opposite stop and take bus ${oppositeRouteList}, however there are no upcoming arrivals.`
+            : `Бұл бағыт қарсы жақта. Қарсы беттегі аялдамаға өтіп, ${oppositeRouteList} автобусына отырыңыз, бірақ жақын келулер қазір жоқ.`
+      }
+
+      if (!directRoutes.length) {
+        if (inferredFromArrivals?.route) {
+          const inferredMinutes = inferredFromArrivals.minutesAway
+          return responseLocale === "ru"
+            ? `С этой остановки сядьте на ${formatRouteLabel(responseLocale, inferredFromArrivals.route)} до ${destinationLabel}. Ближайший автобус через ${formatMinutes(responseLocale, inferredMinutes)}.`
+            : responseLocale === "en"
+              ? `From this stop, take ${formatRouteLabel(responseLocale, inferredFromArrivals.route)} to the ${destinationLabel}. The next bus is in ${formatMinutes(responseLocale, inferredMinutes)}.`
+              : `Осы аялдамадан ${destinationLabel} бағытына ${formatRouteLabel(responseLocale, inferredFromArrivals.route)}-қа отырыңыз. Ең жақын автобус ${formatMinutes(responseLocale, inferredMinutes)} кейін келеді.`
+        }
+
+        const oppositeRouteList = directional.oppositeSide
+          .map((r) => r.route_number)
+          .join(", ")
+
+        if (oppositeRouteList) {
+          const oppositeRouteSet = new Set<string>(
+            directional.oppositeSide
+              .map((r) => normalizeRouteNumber(r.route_number))
+              .filter((v): v is string => Boolean(v))
+          )
+          const oppositeArrival = await getNextUpcomingAtOppositeStopForRoutes(
+            oppositeRouteSet
+          )
+
+          if (oppositeArrival) {
+            return responseLocale === "ru"
+            ? `Эта остановка в противоположном направлении. Перейдите на встречную остановку и сядьте на ${formatRouteLabel(responseLocale, oppositeArrival.route_number)}. Ближайший автобус через ${formatMinutes(responseLocale, oppositeArrival.eta_minutes)}.`
+              : responseLocale === "en"
+              ? `This destination is in the opposite direction. Cross to the opposite stop and take ${formatRouteLabel(responseLocale, oppositeArrival.route_number)}. The next bus is in ${formatMinutes(responseLocale, oppositeArrival.eta_minutes)}.`
+              : `Бұл бағыт қарсы жақта. Қарсы беттегі аялдамаға өтіп, ${formatRouteLabel(responseLocale, oppositeArrival.route_number)}-қа отырыңыз. Ең жақын автобус ${formatMinutes(responseLocale, oppositeArrival.eta_minutes)} кейін келеді.`
+          }
+
+          return responseLocale === "ru"
+            ? `Эта остановка в противоположном направлении. Перейдите на встречную остановку и сядьте на автобус ${oppositeRouteList}, однако ближайших прибытий сейчас нет.`
+            : responseLocale === "en"
+              ? `This destination is in the opposite direction. Cross to the opposite stop and take bus ${oppositeRouteList}, however there are no upcoming arrivals.`
+              : `Бұл бағыт қарсы жақта. Қарсы беттегі аялдамаға өтіп, ${oppositeRouteList} автобусына отырыңыз, бірақ жақын келулер қазір жоқ.`
+        }
+
+        return responseLocale === "ru"
+          ? `С этой стороны нет прямого маршрута до ${destinationLabel}. Перейдите на противоположную остановку или проверьте пересадки в основном приложении.`
+          : responseLocale === "en"
+            ? `There is no direct route from this side to the ${destinationLabel}. Cross to the opposite stop or check transfers in the main app.`
+            : `Осы бағыттан ${destinationLabel} бағытына тікелей маршрут жоқ. Қарсы беттегі аялдамаға өтіңіз немесе негізгі қолданбадан ауысуды тексеріңіз.`
+      }
+
+      const routeList = directRoutes.map((r) => r.route_number).join(", ")
+      const nextAtCurrentStop = getNextUpcomingForRouteNumbers(directRouteNumbers)
+      if (nextAtCurrentStop) {
+        return responseLocale === "ru"
+          ? `С этой остановки сядьте на ${formatRouteLabel(responseLocale, nextAtCurrentStop.route)} до ${destinationLabel}. Ближайший автобус через ${formatMinutes(responseLocale, nextAtCurrentStop.minutesAway)}.`
+          : responseLocale === "en"
+            ? `From this stop, take ${formatRouteLabel(responseLocale, nextAtCurrentStop.route)} to the ${destinationLabel}. The next bus is in ${formatMinutes(responseLocale, nextAtCurrentStop.minutesAway)}.`
+            : `Осы аялдамадан ${destinationLabel} бағытына ${formatRouteLabel(responseLocale, nextAtCurrentStop.route)}-қа отырыңыз. Ең жақын автобус ${formatMinutes(responseLocale, nextAtCurrentStop.minutesAway)} кейін келеді.`
+      }
+      if (nextAtDestination) {
+        return responseLocale === "ru"
+          ? `До ${destinationLabel} можно доехать на маршруте(ах): ${routeList}. Ближайшее прибытие по этим маршрутам: примерно через ${nextAtDestination.eta_minutes} мин.`
+          : responseLocale === "en"
+            ? `You can reach the ${destinationLabel} using route(s): ${routeList}. The next arrival on these routes is in about ${nextAtDestination.eta_minutes} minutes.`
+            : `${destinationLabel} бағытына ${routeList} маршрут(тар)ымен жете аласыз. Осы маршруттар бойынша келесі келу шамамен ${nextAtDestination.eta_minutes} минуттан кейін.`
+      }
+      return responseLocale === "ru"
+        ? `С этой остановки сядьте на автобус ${routeList} до ${destinationLabel}, однако ближайших прибытий сейчас нет.`
+        : responseLocale === "en"
+          ? `From this stop, take bus ${routeList} to the ${destinationLabel}, however there are no upcoming arrivals.`
+          : `Осы аялдамадан ${destinationLabel} бағытына ${routeList} автобусына отырыңыз, бірақ жақын келулер қазір жоқ.`
+    }
+
+    // Next arrival queries (EN + RU keywords)
+    if (
+      questionLower.includes("next") ||
+      questionLower.includes("when") ||
+      questionLower.includes("когда") ||
+      questionLower.includes("первый") ||
+      questionLower.includes("приедет")
+    ) {
+      if (routeNumber) {
+        const arrivalForRoute = upcomingArrivals?.find(
+          (a) => normalizeRouteNumber(a.route) === routeNumber
+        )
+        if (arrivalForRoute) {
+          return `${tx.nextBus} ${arrivalForRoute.route} (${arrivalForRoute.routeName}), ${tx.arrivingIn} ${arrivalForRoute.minutesAway} min.`
+        }
+      }
       if (upcomingArrivals?.length) {
         const next = upcomingArrivals[0]
-        return `${tx.nextBus} ${next.route} (${next.routeName}), ${tx.arrivingIn} ${next.minutesAway} min.`
+        return responseLocale === "ru"
+          ? `${formatRouteLabel(responseLocale, next.route)} прибудет через ${formatMinutes(responseLocale, next.minutesAway)}.`
+          : responseLocale === "en"
+            ? `${formatRouteLabel(responseLocale, next.route)} arrives in ${formatMinutes(responseLocale, next.minutesAway)}.`
+            : `${formatRouteLabel(responseLocale, next.route)} ${formatMinutes(responseLocale, next.minutesAway)} кейін келеді.`
       }
       return tx.noArrivals
     }
     
-    // Route information queries
-    if (questionLower.includes("route") && routes?.length) {
-      const routeMatch = questionLower.match(/route\s*(\d+|[a-z]\d+)/i)
-      if (routeMatch) {
-        const routeNum = routeMatch[1].toUpperCase()
-        const route = routes.find((r) => r.route_number.toUpperCase() === routeNum)
-        if (route) {
-          return `Route ${route.route_number} is the ${route.route_name}. It is currently ${route.is_active ? "active" : "inactive"}.`
+    // Route information / "when will route X arrive" queries
+    if (
+      routes?.length &&
+      (questionLower.includes("route") ||
+        questionLower.includes("маршрут") ||
+        questionLower.includes("автобус"))
+    ) {
+      // Try to extract a route number like "12" from the question
+      if (routeNumber) {
+        const routeNum = routeNumber.toUpperCase()
+        const route = routes.find(
+          (r) => normalizeRouteNumber(r.route_number)?.toUpperCase() === routeNum
+        )
+
+        // If we also have upcoming arrivals, try to answer "when will 12 arrive?"
+        const arrivalForRoute = upcomingArrivals?.find(
+          (a) => normalizeRouteNumber(a.route)?.toUpperCase() === routeNum
+        )
+        if (arrivalForRoute) {
+          return responseLocale === "ru"
+            ? `${formatRouteLabel(responseLocale, arrivalForRoute.route)} прибудет через ${formatMinutes(responseLocale, arrivalForRoute.minutesAway)}.`
+            : responseLocale === "en"
+              ? `${formatRouteLabel(responseLocale, arrivalForRoute.route)} arrives in ${formatMinutes(responseLocale, arrivalForRoute.minutesAway)}.`
+              : `${formatRouteLabel(responseLocale, arrivalForRoute.route)} ${formatMinutes(responseLocale, arrivalForRoute.minutesAway)} кейін келеді.`
         }
-        return `I don't have information about Route ${routeNum}.`
+
+        if (route) {
+          return responseLocale === "ru"
+            ? `${formatRouteLabel(responseLocale, route.route_number)}. Направление: ${normalizeRouteDisplayName(route.route_name)}. Статус: ${route.is_active ? "активен" : "неактивен"}.`
+            : responseLocale === "en"
+              ? `${formatRouteLabel(responseLocale, route.route_number)}. Direction: ${normalizeRouteDisplayName(route.route_name)}. Status: ${route.is_active ? "active" : "inactive"}.`
+              : `${formatRouteLabel(responseLocale, route.route_number)}. Бағыт: ${normalizeRouteDisplayName(route.route_name)}. Күйі: ${route.is_active ? "белсенді" : "белсенді емес"}.`
+        }
+        return responseLocale === "ru"
+          ? `Для маршрута ${routeNum} сейчас нет данных о ближайшем прибытии.`
+          : responseLocale === "en"
+            ? `There is currently no nearby arrival data for route ${routeNum}.`
+            : `${routeNum} маршруты үшін жақын келу деректері қазір жоқ.`
       }
-      return `We have the following routes: ${routes.slice(0, 5).map((r) => r.route_number).join(", ")}.`
+      return responseLocale === "ru"
+        ? `Доступные маршруты: ${routes.slice(0, 5).map((r) => r.route_number).join(", ")}.`
+        : responseLocale === "en"
+          ? `Available routes: ${routes.slice(0, 5).map((r) => r.route_number).join(", ")}.`
+          : `Қолжетімді маршруттар: ${routes.slice(0, 5).map((r) => r.route_number).join(", ")}.`
     }
     
     // Alert queries
     if (questionLower.includes("alert") || questionLower.includes("delay") || questionLower.includes("running")) {
       if (alerts?.length) {
-        return `There are ${alerts.length} active alerts: ${alerts.slice(0, 2).map((a) => a.title).join(", ")}.`
+        return responseLocale === "ru"
+          ? `Активных предупреждений: ${alerts.length}. ${alerts.slice(0, 2).map((a) => a.title).join(", ")}.`
+          : responseLocale === "en"
+            ? `There are ${alerts.length} active alerts: ${alerts.slice(0, 2).map((a) => a.title).join(", ")}.`
+            : `Белсенді ескертулер саны: ${alerts.length}. ${alerts.slice(0, 2).map((a) => a.title).join(", ")}.`
       }
-      return "There are no active service alerts at this time."
+      return responseLocale === "ru"
+        ? "Сейчас активных транспортных предупреждений нет."
+        : responseLocale === "en"
+          ? "There are no active service alerts at this time."
+          : "Қазір белсенді көлік ескертулері жоқ."
     }
     
     // List all arrivals
@@ -159,14 +707,18 @@ Instructions:
           .map((a) => `• Route ${a.route}: ${a.minutesAway} min`)
           .join("\n")}`
       }
-      return "There are no upcoming arrivals at this stop."
+      return responseLocale === "ru"
+        ? "На этой остановке нет ближайших прибытий."
+        : responseLocale === "en"
+          ? "There are no upcoming arrivals at this stop."
+          : "Бұл аялдамада жақын келулер жоқ."
     }
     
     // Default response
     return `${tx.generic} ${stopName || "this stop"}: ${
       upcomingArrivals?.length
-        ? `${upcomingArrivals[0].route} ${tx.arrivingIn} ${upcomingArrivals[0].minutesAway} min`
-        : tx.noArrivals
+        ? `${formatRouteLabel(responseLocale, upcomingArrivals[0].route)} ${tx.arrivingIn} ${formatMinutes(responseLocale, upcomingArrivals[0].minutesAway)}`
+        : tx.insufficient
     }`
   }
 
@@ -187,15 +739,31 @@ Instructions:
                 (a) => a.route?.toLowerCase() === routeNumber.toLowerCase()
               )
               if (arrival) {
-                return `Route ${arrival.route} (${arrival.routeName}) - Bus ${arrival.busNumber} arrives in ${arrival.minutesAway} minutes`
+                return responseLocale === "ru"
+                  ? `${formatRouteLabel(responseLocale, arrival.route)} прибудет через ${formatMinutes(responseLocale, arrival.minutesAway)}.`
+                  : responseLocale === "en"
+                    ? `${formatRouteLabel(responseLocale, arrival.route)} arrives in ${formatMinutes(responseLocale, arrival.minutesAway)}.`
+                    : `${formatRouteLabel(responseLocale, arrival.route)} ${formatMinutes(responseLocale, arrival.minutesAway)} кейін келеді.`
               }
-              return `No upcoming arrivals for Route ${routeNumber} at this stop`
+              return responseLocale === "ru"
+                ? `Для ${formatRouteLabel(responseLocale, routeNumber)} на этой остановке нет ближайших прибытий.`
+                : responseLocale === "en"
+                  ? `No upcoming arrivals for ${formatRouteLabel(responseLocale, routeNumber)} at this stop.`
+                  : `Бұл аялдамада ${formatRouteLabel(responseLocale, routeNumber)} үшін жақын келулер жоқ.`
             }
             if (upcomingArrivals?.length) {
               const next = upcomingArrivals[0]
-              return `Next bus: Route ${next.route} (${next.routeName}) - Bus ${next.busNumber} arrives in ${next.minutesAway} minutes`
+              return responseLocale === "ru"
+                ? `${formatRouteLabel(responseLocale, next.route)} прибудет через ${formatMinutes(responseLocale, next.minutesAway)}.`
+                : responseLocale === "en"
+                  ? `${formatRouteLabel(responseLocale, next.route)} arrives in ${formatMinutes(responseLocale, next.minutesAway)}.`
+                  : `${formatRouteLabel(responseLocale, next.route)} ${formatMinutes(responseLocale, next.minutesAway)} кейін келеді.`
             }
-            return "No upcoming arrivals at this stop"
+            return responseLocale === "ru"
+              ? "На этой остановке нет ближайших прибытий."
+              : responseLocale === "en"
+                ? "No upcoming arrivals at this stop."
+                : "Бұл аялдамада жақын келулер жоқ."
           },
         }),
         getRouteInfo: tool({
@@ -204,13 +772,152 @@ Instructions:
             routeNumber: z.string().describe("The route number to get info about"),
           }),
           execute: async ({ routeNumber }) => {
+            const normalized = normalizeRouteNumber(routeNumber)?.toLowerCase()
             const route = routes?.find(
-              (r) => r.route_number.toLowerCase() === routeNumber.toLowerCase()
+              (r) =>
+                normalizeRouteNumber(r.route_number)?.toLowerCase() === normalized
             )
             if (route) {
-              return `Route ${route.route_number}: ${route.route_name} - Status: ${route.is_active ? "Active" : "Inactive"}`
+              return responseLocale === "ru"
+                ? `${formatRouteLabel(responseLocale, route.route_number)}. Направление: ${normalizeRouteDisplayName(route.route_name)}. Статус: ${route.is_active ? "активен" : "неактивен"}.`
+                : responseLocale === "en"
+                  ? `${formatRouteLabel(responseLocale, route.route_number)}. Direction: ${normalizeRouteDisplayName(route.route_name)}. Status: ${route.is_active ? "active" : "inactive"}.`
+                  : `${formatRouteLabel(responseLocale, route.route_number)}. Бағыт: ${normalizeRouteDisplayName(route.route_name)}. Күйі: ${route.is_active ? "белсенді" : "белсенді емес"}.`
             }
-            return `Route ${routeNumber} not found`
+            return responseLocale === "ru"
+              ? `${formatRouteLabel(responseLocale, routeNumber)} не найден.`
+              : responseLocale === "en"
+                ? `${formatRouteLabel(responseLocale, routeNumber)} not found.`
+                : `${formatRouteLabel(responseLocale, routeNumber)} табылмады.`
+          },
+        }),
+        getDestinationRoute: tool({
+          description:
+            "Get direct routes and estimated travel guidance to airport or railway station using canonical stop IDs",
+          inputSchema: z.object({
+            destination: z.enum(["airport", "railway_station", "martial_palace"]),
+          }),
+          execute: async ({ destination }) => {
+            if (!stopId) {
+              return responseLocale === "ru"
+                ? "Текущая остановка не определена."
+                : responseLocale === "en"
+                  ? "Current stop is unknown."
+                  : "Ағымдағы аялдама анықталмады."
+            }
+
+            const destinationStopId =
+              destination === "airport"
+                ? CANONICAL_DESTINATIONS.airport.id
+                : destination === "martial_palace"
+                  ? CANONICAL_DESTINATIONS.martialPalace.id
+                  : CANONICAL_DESTINATIONS.railwayStation.id
+            const directional = getDirectionalRoutesToDestination(destinationStopId)
+            const hasDirectionalMatch =
+              directional.sameSide.length > 0 || directional.oppositeSide.length > 0
+            const directRoutes =
+              directional.sameSide.length > 0
+                ? directional.sameSide
+                : hasDirectionalMatch
+                  ? []
+                  : getDirectRoutesToDestination(destinationStopId)
+            const inferredFromArrivals = inferSameSideRouteFromArrivals(
+              destination === "airport"
+                ? "airport"
+                : destination === "martial_palace"
+                  ? "martialPalace"
+                  : "railwayStation",
+              destinationStopId
+            )
+            if (directional.oppositeSide.length > 0 && directional.sameSide.length === 0) {
+              const oppositeRouteList = directional.oppositeSide
+                .map((r) => r.route_number)
+                .join(", ")
+              const oppositeRouteSet = new Set<string>(
+                directional.oppositeSide
+                  .map((r) => normalizeRouteNumber(r.route_number))
+                  .filter((v): v is string => Boolean(v))
+              )
+              const oppositeArrival = await getNextUpcomingAtOppositeStopForRoutes(
+                oppositeRouteSet
+              )
+              if (oppositeArrival) {
+                return responseLocale === "ru"
+                  ? `Нужно ехать с противоположной стороны. Перейдите на встречную остановку и сядьте на ${formatRouteLabel(responseLocale, oppositeArrival.route_number)}. Ближайший автобус через ${formatMinutes(responseLocale, oppositeArrival.eta_minutes)}.`
+                  : responseLocale === "en"
+                    ? `Opposite side required. Cross to the opposite stop and take ${formatRouteLabel(responseLocale, oppositeArrival.route_number)}. The next bus is in ${formatMinutes(responseLocale, oppositeArrival.eta_minutes)}.`
+                    : `Қарсы бағыт қажет. Қарсы беттегі аялдамаға өтіп, ${formatRouteLabel(responseLocale, oppositeArrival.route_number)}-қа отырыңыз. Ең жақын автобус ${formatMinutes(responseLocale, oppositeArrival.eta_minutes)} кейін келеді.`
+              }
+              return responseLocale === "ru"
+                ? `Нужно ехать с противоположной стороны. Перейдите на встречную остановку и сядьте на автобус ${oppositeRouteList}, однако ближайших прибытий сейчас нет.`
+                : responseLocale === "en"
+                  ? `Opposite side required. Cross to the opposite stop and take bus ${oppositeRouteList}, however there are no upcoming arrivals.`
+                  : `Қарсы бағыт қажет. Қарсы беттегі аялдамаға өтіп, ${oppositeRouteList} автобусына отырыңыз, бірақ жақын келулер қазір жоқ.`
+            }
+            if (!directRoutes.length) {
+              if (inferredFromArrivals?.route) {
+                return `From this stop, take route ${inferredFromArrivals.route} to ${destination}. The next bus is in ${inferredFromArrivals.minutesAway} minutes.`
+              }
+              const oppositeRouteList = directional.oppositeSide
+                .map((r) => r.route_number)
+                .join(", ")
+              if (oppositeRouteList) {
+                const oppositeRouteSet = new Set<string>(
+                  directional.oppositeSide
+                    .map((r) => normalizeRouteNumber(r.route_number))
+                    .filter((v): v is string => Boolean(v))
+                )
+                const oppositeArrival = await getNextUpcomingAtOppositeStopForRoutes(
+                  oppositeRouteSet
+                )
+                if (oppositeArrival) {
+                  return responseLocale === "ru"
+                    ? `Нужно ехать с противоположной стороны. Перейдите на встречную остановку и сядьте на ${formatRouteLabel(responseLocale, oppositeArrival.route_number)}. Ближайший автобус через ${formatMinutes(responseLocale, oppositeArrival.eta_minutes)}.`
+                    : responseLocale === "en"
+                      ? `Opposite side required. Cross to the opposite stop and take ${formatRouteLabel(responseLocale, oppositeArrival.route_number)}. The next bus is in ${formatMinutes(responseLocale, oppositeArrival.eta_minutes)}.`
+                      : `Қарсы бағыт қажет. Қарсы беттегі аялдамаға өтіп, ${formatRouteLabel(responseLocale, oppositeArrival.route_number)}-қа отырыңыз. Ең жақын автобус ${formatMinutes(responseLocale, oppositeArrival.eta_minutes)} кейін келеді.`
+                }
+                return responseLocale === "ru"
+                  ? `Нужно ехать с противоположной стороны. Перейдите на встречную остановку и сядьте на автобус ${oppositeRouteList}, однако ближайших прибытий сейчас нет.`
+                  : responseLocale === "en"
+                    ? `Opposite side required. Cross to the opposite stop and take bus ${oppositeRouteList}, however there are no upcoming arrivals.`
+                    : `Қарсы бағыт қажет. Қарсы беттегі аялдамаға өтіп, ${oppositeRouteList} автобусына отырыңыз, бірақ жақын келулер қазір жоқ.`
+              }
+              return responseLocale === "ru"
+                ? "С этой остановки прямой маршрут не найден."
+                : responseLocale === "en"
+                  ? "No direct routes found from this stop."
+                  : "Бұл аялдамадан тікелей маршрут табылмады."
+            }
+
+            const destinationEta = await getEtaPayload(
+              supabase,
+              destinationStopId,
+              false,
+              false
+            )
+            const directRouteNumbers = new Set<string>(
+              directRoutes
+                .map((r) => normalizeRouteNumber(r.route_number))
+                .filter((v): v is string => Boolean(v))
+            )
+            const nextAtDestination = destinationEta.arrivals.find((a) =>
+              directRouteNumbers.has(normalizeRouteNumber(a.route_number) ?? "")
+            )
+            const nextAtCurrentStop = getNextUpcomingForRouteNumbers(directRouteNumbers)
+
+            const list = directRoutes.map((r) => r.route_number).join(", ")
+            if (nextAtCurrentStop) {
+              return `From this stop, take route ${nextAtCurrentStop.route} to ${destination}. The next bus is in ${nextAtCurrentStop.minutesAway} minutes.`
+            }
+            if (nextAtDestination) {
+              return responseLocale === "ru"
+                ? `Прямые маршруты: ${list}. Следующий автобус по этим маршрутам примерно через ${formatMinutes(responseLocale, nextAtDestination.eta_minutes)}.`
+                : responseLocale === "en"
+                  ? `Direct routes: ${list}. Estimated next arrival on these routes is in ${formatMinutes(responseLocale, nextAtDestination.eta_minutes)}.`
+                  : `Тікелей маршруттар: ${list}. Осы маршруттар бойынша келесі автобус шамамен ${formatMinutes(responseLocale, nextAtDestination.eta_minutes)} кейін келеді.`
+            }
+            return `From this stop, take route(s) ${list} to ${destination}, however there are no upcoming arrivals.`
           },
         }),
         getAlerts: tool({
@@ -224,7 +931,6 @@ Instructions:
           },
         }),
       },
-      maxSteps: 3,
     })
 
     const responseTime = Date.now() - startTime
@@ -233,9 +939,21 @@ Instructions:
     // Determine intent from the question
     let intent = "general"
     const questionLower = question.toLowerCase()
-    if (questionLower.includes("when") || questionLower.includes("next") || questionLower.includes("arrive")) {
+    if (
+      questionLower.includes("when") ||
+      questionLower.includes("next") ||
+      questionLower.includes("arrive") ||
+      questionLower.includes("когда") ||
+      questionLower.includes("приедет")
+    ) {
       intent = "eta_query"
-    } else if (questionLower.includes("route") || questionLower.includes("get to") || questionLower.includes("go to")) {
+    } else if (
+      questionLower.includes("route") ||
+      questionLower.includes("get to") ||
+      questionLower.includes("go to") ||
+      questionLower.includes("как доехать") ||
+      questionLower.includes("доехать")
+    ) {
       intent = "route_query"
     } else if (questionLower.includes("schedule") || questionLower.includes("time") || questionLower.includes("last")) {
       intent = "schedule_query"
@@ -264,14 +982,26 @@ Instructions:
     console.log("[v0] AI API error, using fallback:", error)
 
     // Use rule-based fallback when AI is unavailable
-    const fallbackAnswer = generateFallbackAnswer()
+    const fallbackAnswer = await generateFallbackAnswer()
     
     // Determine intent from the question
     let intent = "general"
     const questionLower = question.toLowerCase()
-    if (questionLower.includes("when") || questionLower.includes("next") || questionLower.includes("arrive")) {
+    if (
+      questionLower.includes("when") ||
+      questionLower.includes("next") ||
+      questionLower.includes("arrive") ||
+      questionLower.includes("когда") ||
+      questionLower.includes("приедет")
+    ) {
       intent = "eta_query"
-    } else if (questionLower.includes("route") || questionLower.includes("get to") || questionLower.includes("go to")) {
+    } else if (
+      questionLower.includes("route") ||
+      questionLower.includes("get to") ||
+      questionLower.includes("go to") ||
+      questionLower.includes("как доехать") ||
+      questionLower.includes("доехать")
+    ) {
       intent = "route_query"
     } else if (questionLower.includes("schedule") || questionLower.includes("time") || questionLower.includes("last")) {
       intent = "schedule_query"

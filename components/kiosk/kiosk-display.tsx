@@ -279,7 +279,21 @@ export function KioskDisplay({ stops, defaultStopId, alerts }: KioskDisplayProps
             />
 
             <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-[0_18px_60px_rgba(15,23,42,0.12)] lg:p-6">
-              <KioskVoiceAssistant stopId={selectedStopId} stopName={selectedStop?.name} />
+              <KioskVoiceAssistant
+                stopId={selectedStopId}
+                stopName={selectedStop?.name}
+                contextArrivals={etas.map((e) => ({
+                  routeNumber: e.route?.route_number ?? "",
+                  routeName: e.route?.route_name ?? "",
+                  busNumber: e.bus?.bus_number ?? "",
+                  minutesAway: Math.max(
+                    0,
+                    Math.round(
+                      (new Date(e.predicted_arrival).getTime() - Date.now()) / 60000
+                    )
+                  ),
+                }))}
+              />
             </div>
 
             <div className="rounded-2xl border border-slate-200 bg-white p-4 lg:hidden">

@@ -30,6 +30,7 @@ type OpenMeteoResponse = {
 }
 
 const ASTANA = { lat: 51.1694, lon: 71.4491, label: "Astana" }
+const LAST_WEATHER_CACHE_KEY = "kiosk:last-weather-snapshot"
 
 function clampCoord(v: number, min: number, max: number) {
   return Math.min(max, Math.max(min, v))
@@ -52,7 +53,7 @@ function formatTemp(v?: number) {
 }
 
 export function KioskWeather({ latitude, longitude, locationLabel }: KioskWeatherProps) {
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
   const coords = useMemo(() => {
     if (typeof latitude === "number" && typeof longitude === "number") {
       return {
@@ -67,6 +68,27 @@ export function KioskWeather({ latitude, longitude, locationLabel }: KioskWeathe
   const [status, setStatus] = useState<WeatherStatus>("idle")
   const [data, setData] = useState<OpenMeteoResponse | null>(null)
   const [lastUpdatedAt, setLastUpdatedAt] = useState<number | null>(null)
+  const [isUsingCachedData, setIsUsingCachedData] = useState(false)
+
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(LAST_WEATHER_CACHE_KEY)
+      if (!raw) return
+      const parsed = JSON.parse(raw) as {
+        data?: OpenMeteoResponse
+        updatedAt?: number
+      }
+      if (parsed?.data) {
+        setData(parsed.data)
+        setIsUsingCachedData(true)
+      }
+      if (typeof parsed?.updatedAt === "number") {
+        setLastUpdatedAt(parsed.updatedAt)
+      }
+    } catch {
+      // Ignore cache parse errors and continue with network fetch.
+    }
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -87,11 +109,24 @@ export function KioskWeather({ latitude, longitude, locationLabel }: KioskWeathe
         if (cancelled) return
 
         setData(json)
-        setLastUpdatedAt(Date.now())
+        setIsUsingCachedData(false)
+        const updatedAt = Date.now()
+        setLastUpdatedAt(updatedAt)
+        try {
+          window.localStorage.setItem(
+            LAST_WEATHER_CACHE_KEY,
+            JSON.stringify({ data: json, updatedAt })
+          )
+        } catch {
+          // Ignore cache write errors (private mode, quota, etc.).
+        }
         setStatus("ready")
       } catch {
         if (cancelled) return
         setStatus("error")
+        if (window.localStorage.getItem(LAST_WEATHER_CACHE_KEY)) {
+          setIsUsingCachedData(true)
+        }
       }
     }
 
@@ -107,6 +142,7 @@ export function KioskWeather({ latitude, longitude, locationLabel }: KioskWeathe
   const max = data?.daily?.temperature_2m_max?.[0]
   const min = data?.daily?.temperature_2m_min?.[0]
   const pop = data?.daily?.precipitation_probability_max?.[0]
+  const hasCachedOrFreshData = data != null
 
   return (
     <div className="flex flex-col rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200">
@@ -122,10 +158,20 @@ export function KioskWeather({ latitude, longitude, locationLabel }: KioskWeathe
           </div>
           <div className="min-w-0">
             <div className="text-2xl font-semibold text-slate-900">
-              {status === "ready" ? formatTemp(data?.current?.temperature_2m) : "—"}
+              {hasCachedOrFreshData ? formatTemp(data?.current?.temperature_2m) : "—"}
             </div>
             <div className="text-xs text-slate-500">
-              {status === "loading" ? t("common.loading") : status === "error" ? t("kiosk.unavailable") : t("common.now")}
+              {status === "loading" && !hasCachedOrFreshData
+                ? t("common.loading")
+                : status === "error" && !hasCachedOrFreshData
+                  ? t("kiosk.unavailable")
+                  : isUsingCachedData
+                    ? locale === "ru"
+                      ? "из кэша"
+                      : locale === "en"
+                        ? "cached"
+                        : "кэштен"
+                    : t("common.now")}
             </div>
           </div>
         </div>
@@ -149,7 +195,7 @@ export function KioskWeather({ latitude, longitude, locationLabel }: KioskWeathe
           <div className="flex items-center gap-2">
             <Wind className="h-4 w-4" />
             <span>
-              {status === "ready" && data?.current?.wind_speed_10m != null
+              {hasCachedOrFreshData && data?.current?.wind_speed_10m != null
                 ? `${Math.round(data.current.wind_speed_10m)} m/s`
                 : "—"}
             </span>
