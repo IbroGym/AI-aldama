@@ -57,7 +57,7 @@ export function vehiclesDtoFromStates(
     const servesFocus =
       !!focusStop &&
       !!route &&
-      stateServesStop(transit, state, route, focusStopId!)
+      stateServesStop(transit, state, route, focusStopId!, focusStop)
 
     let eta_minutes: number | undefined
     let eta_confidence_pct: number | undefined

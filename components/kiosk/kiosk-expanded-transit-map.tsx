@@ -46,10 +46,8 @@ export type KioskExpandedEtaRow = {
   bus?: { bus_number?: string } | null
 }
 
-/** Padding passed to Leaflet fitBounds (px). */
-const FIT_BOUNDS_PADDING: [number, number] = [36, 36]
-const FIT_BOUNDS_PADDING_MOBILE: [number, number] = [28, 28]
-const FIT_MAX_ZOOM = 17
+/** Zoom when user taps "return to stop" or when tracking a bus — street-level, subject to map maxZoom. */
+const STOP_RESET_ZOOM = 16
 const STOP_ONLY_PAD_DEG = 0.004
 /** Extra margin around focused content for maxBounds (pan limit), as fraction of span. */
 const PAN_LIMIT_MARGIN_RATIO = 0.38
@@ -166,33 +164,16 @@ function kioskBusRotatedIcon(
   })
 }
 
-function useFitPadding(): [number, number] {
-  const [pad, setPad] = useState<[number, number]>(FIT_BOUNDS_PADDING)
-  useEffect(() => {
-    const mq = window.matchMedia("(max-width: 640px)")
-    const apply = () =>
-      setPad(mq.matches ? FIT_BOUNDS_PADDING_MOBILE : FIT_BOUNDS_PADDING)
-    apply()
-    mq.addEventListener("change", apply)
-    return () => mq.removeEventListener("change", apply)
-  }, [])
-  return pad
-}
-
 function MapFocusController({
   stopCenter,
   panLimitBounds,
-  fitPadding,
   fitGeneration,
-  getFocusedBounds,
   onReady,
 }: {
   stopCenter: [number, number]
   panLimitBounds: L.LatLngBounds
-  fitPadding: [number, number]
-  /** Bump when the map should refit to full focused content (open, filter change, etc.). */
+  /** Bump when the map should re-apply the stop-centered view (open, filter change, first route load). */
   fitGeneration: number
-  getFocusedBounds: () => L.LatLngBounds
   onReady: (api: {
     resetView: () => void
     trackStopAndBus: (busLat: number, busLng: number) => void
@@ -206,39 +187,30 @@ function MapFocusController({
     map.setMaxZoom(17)
   }, [map, panLimitBounds])
 
-  const runFit = useCallback(
-    (bounds: L.LatLngBounds, animate: boolean) => {
+  const applyStopFocusView = useCallback(
+    (animate: boolean) => {
       map.invalidateSize()
-      map.fitBounds(bounds, {
-        padding: fitPadding,
-        maxZoom: FIT_MAX_ZOOM,
-        animate,
-      })
+      map.setView(stopCenter, STOP_RESET_ZOOM, { animate })
     },
-    [map, fitPadding],
+    [map, stopCenter],
   )
 
   useEffect(() => {
-    const resetView = () => {
-      runFit(getFocusedBounds(), true)
-    }
+    const resetView = () => applyStopFocusView(true)
     const trackStopAndBus = (busLat: number, busLng: number) => {
-      const bounds = L.latLngBounds(stopCenter, [busLat, busLng])
-      runFit(bounds, true)
+      map.invalidateSize()
+      map.setView([busLat, busLng], STOP_RESET_ZOOM, { animate: true })
     }
     onReady({ resetView, trackStopAndBus })
     return () => onReady({ resetView: () => {}, trackStopAndBus: () => {} })
-  }, [map, onReady, stopCenter, getFocusedBounds, runFit])
+  }, [map, onReady, applyStopFocusView])
 
   useEffect(() => {
-    const bounds = getFocusedBounds()
     const t = window.setTimeout(() => {
-      runFit(bounds, false)
+      applyStopFocusView(false)
     }, 0)
     return () => clearTimeout(t)
-    // Only refit when fitGeneration changes (open / filter / first route load).
-    // Intentionally omit getFocusedBounds from deps — stable fitGeneration + latest bounds via closure on bump.
-  }, [fitGeneration, runFit])
+  }, [fitGeneration, applyStopFocusView])
 
   return null
 }
@@ -367,11 +339,6 @@ export function KioskExpandedTransitMap({
     return list
   }, [vehicles, visibleRoutes, routeFilter])
 
-  const visibleRoutesRef = useRef(visibleRoutes)
-  visibleRoutesRef.current = visibleRoutes
-  const visibleVehiclesRef = useRef(visibleVehicles)
-  visibleVehiclesRef.current = visibleVehicles
-
   const [fitKey, setFitKey] = useState(0)
   useEffect(() => {
     if (!open) return
@@ -391,16 +358,6 @@ export function KioskExpandedTransitMap({
     servingRoutesLenRef.current = n
   }, [open, servingRoutes.length])
 
-  const getFocusedBounds = useCallback(
-    () =>
-      computeFocusedLatLngBounds(
-        stopCenter,
-        visibleRoutesRef.current,
-        visibleVehiclesRef.current,
-      ),
-    [stopCenter],
-  )
-
   const corridorBounds = useMemo(
     () => computeFocusedLatLngBounds(stopCenter, visibleRoutes, []),
     [stopCenter, visibleRoutes],
@@ -410,8 +367,6 @@ export function KioskExpandedTransitMap({
     () => panLimitBoundsFromFocused(corridorBounds),
     [corridorBounds],
   )
-
-  const fitPadding = useFitPadding()
 
   const primaryVehicleId = useMemo(() => {
     let list = etas
@@ -553,7 +508,7 @@ export function KioskExpandedTransitMap({
           <MapContainer
             key={`${stopId}-${open ? "open" : "closed"}`}
             center={stopCenter}
-            zoom={16}
+            zoom={STOP_RESET_ZOOM}
             maxBounds={panLimitBounds}
             maxBoundsViscosity={0.92}
             scrollWheelZoom
@@ -570,9 +525,7 @@ export function KioskExpandedTransitMap({
             <MapFocusController
               stopCenter={stopCenter}
               panLimitBounds={panLimitBounds}
-              fitPadding={fitPadding}
               fitGeneration={fitKey}
-              getFocusedBounds={getFocusedBounds}
               onReady={registerMapApi}
             />
 

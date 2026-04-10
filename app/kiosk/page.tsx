@@ -7,26 +7,33 @@ import {
   KIOSK_SELECTOR_EXTRA_STOP_IDS,
   KIOSK_TEATR_ASTANA_OPERA_STOP_ID,
 } from "@/lib/kiosk/kiosk-selector-extra-stop-ids"
-import { ROUTE_10_NU_OUTBOUND_SIDE_STOP_ID } from "@/lib/vehicles/route10-nu-demo-stops"
+import {
+  ROUTE_10_NU_OUTBOUND_SIDE_LEGACY_STOP_ID,
+  ROUTE_10_NU_OUTBOUND_SIDE_STOP_ID,
+} from "@/lib/vehicles/route10-nu-demo-stops"
 import { getEtaPayload } from "@/lib/vehicles/vehicle-service"
 
 export default async function KioskPage() {
   const supabase = await createClient()
   const locale = await getServerLocale()
 
-  /** Demo kiosk: outbound-side Route 10 Nazarbayev University platform. */
-  const featuredOutboundNuStopCode = ROUTE_10_NU_OUTBOUND_SIDE_STOP_ID
+  /** Demo kiosk: outbound-side Route 10 Nazarbayev University platform (`id` + GTFS `stop_code`). */
+  const featuredNuStopId = ROUTE_10_NU_OUTBOUND_SIDE_STOP_ID
+  const featuredNuStopCodeLegacy = ROUTE_10_NU_OUTBOUND_SIDE_LEGACY_STOP_ID
 
   if (process.env.NODE_ENV === "development") {
-    console.info(
-      "[kiosk] featured outbound NU bound to public.bus_stops.id",
-      featuredOutboundNuStopCode,
-    )
+    console.info("[kiosk] featured outbound NU", {
+      bus_stops_id: featuredNuStopId,
+      stop_code_legacy: featuredNuStopCodeLegacy,
+    })
   }
 
   const kioskStopOrFilter = [
     "has_display.eq.true",
-    `stop_code.eq.${featuredOutboundNuStopCode}`,
+    `id.eq.${featuredNuStopId}`,
+    `stop_code.eq.${featuredNuStopCodeLegacy}`,
+    // Some imports keep GTFS uuid in both columns.
+    `stop_code.eq.${featuredNuStopId}`,
     ...KIOSK_SELECTOR_EXTRA_STOP_IDS.map((id) => `id.eq.${id}`),
   ].join(",")
 
@@ -39,11 +46,19 @@ export default async function KioskPage() {
     .order("name")
 
   const defaultStop =
-    stops?.find((s) => s.stop_code === featuredOutboundNuStopCode) ?? stops?.[0]
+    stops?.find(
+      (s) =>
+        s.id === featuredNuStopId ||
+        s.stop_code === featuredNuStopCodeLegacy ||
+        s.stop_code === featuredNuStopId,
+    ) ?? stops?.[0]
 
   if (process.env.NODE_ENV === "development") {
     console.info("[kiosk] featured stop row from DB", {
-      found: !!defaultStop && defaultStop.stop_code === featuredOutboundNuStopCode,
+      matched_nu:
+        !!defaultStop &&
+        (defaultStop.id === featuredNuStopId ||
+          defaultStop.stop_code === featuredNuStopCodeLegacy),
       id: defaultStop?.id,
       stop_code: defaultStop?.stop_code,
       name: defaultStop?.name,

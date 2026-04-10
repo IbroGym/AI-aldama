@@ -5,7 +5,7 @@ import { isLocale, type Locale } from "@/lib/i18n/config"
 import { getEtaPayload } from "@/lib/vehicles/vehicle-service"
 import {
   ROUTE_10_INBOUND_STOP_IDS,
-  ROUTE_10_OUTBOUND_DEBUG_STOP_CODES,
+  ROUTE_10_OUTBOUND_STOP_IDS,
   ROUTE_12_INBOUND_STOP_IDS,
   ROUTE_12_OUTBOUND_STOP_IDS,
   ROUTE_46_INBOUND_STOP_IDS,
@@ -13,27 +13,45 @@ import {
 } from "@/lib/vehicles/route-overrides"
 import {
   ROUTE_10_NU_INBOUND_SIDE_BUS_STOP_ID,
+  ROUTE_10_NU_INBOUND_SIDE_STOP_CODE,
+  ROUTE_10_NU_OUTBOUND_SIDE_LEGACY_STOP_ID,
   ROUTE_10_NU_OUTBOUND_SIDE_STOP_ID,
+  isNazarbayevInboundPlatformRow,
+  isNazarbayevOutboundPlatformRow,
+  resolveNazarbayevOppositeStopDbId,
 } from "@/lib/vehicles/route10-nu-demo-stops"
 
 const CANONICAL_DESTINATIONS = {
   airport: {
     id: "8c4ad112-e945-4ebf-ace1-1ac761470bfc",
-    synonyms: ["аэропорт", "международный аэропорт", "airport", "terminal"],
+    synonyms: [
+      "әуежай",
+      "халықаралық әуежай",
+      "аэропорт",
+      "международный аэропорт",
+      "airport",
+      "terminal",
+      "auezhai",
+    ],
   },
   railwayStation: {
     id: "a9adbb0f-d9f8-43d7-9084-dc71cf757017",
     synonyms: [
+      "темір жол вокзалы",
+      "темір жол",
+      "теміржол вокзалы",
+      "теміржол",
       "жд вокзал",
       "вокзал",
       "железнодорожный вокзал",
       "railway station",
       "train station",
+      "temirzhol",
     ],
   },
   martialPalace: {
     // "Дворец единоборств им. Жаксылыка Ушкемпирова"
-    id: "c885bb33-9730-4071-9429-8ad8e56f4a7e",
+    id: "a9566d81-a191-47aa-a4dc-70ea4c6b0e83",
     synonyms: [
       "дворец единоборств",
       "ushkempirov",
@@ -49,6 +67,7 @@ const MARTIAL_PALACE_STOP_ID = CANONICAL_DESTINATIONS.martialPalace.id
 
 const OPPOSITE_STOP_BY_ID: Record<string, string> = {
   [ROUTE_10_NU_OUTBOUND_SIDE_STOP_ID]: ROUTE_10_NU_INBOUND_SIDE_BUS_STOP_ID,
+  [ROUTE_10_NU_OUTBOUND_SIDE_LEGACY_STOP_ID]: ROUTE_10_NU_INBOUND_SIDE_BUS_STOP_ID,
   [ROUTE_10_NU_INBOUND_SIDE_BUS_STOP_ID]: ROUTE_10_NU_OUTBOUND_SIDE_STOP_ID,
 }
 const BUS_PREFIX_ROUTES = new Set(["10", "12", "46"])
@@ -159,7 +178,9 @@ function destinationNameTokens(
   if (key === "martialPalace") {
     return ["единоборств", "ушкемп", "martial", "ushkemp"]
   }
-  return ["railway", "train station", "rail station", "вокзал", "ж/д", "теміржол"]
+  // Avoid "railway"/"train station" — route 10 name is "… Railway Station — … Airport" and would
+  // match airport-bound buses when the passenger asks for the railway station.
+  return ["вокзал", "ж/д", "теміржол", "темір жол", "temirzhol", "станция"]
 }
 
 const DIRECTIONAL_ROUTE_STOPS: Record<
@@ -167,9 +188,7 @@ const DIRECTIONAL_ROUTE_STOPS: Record<
   { outbound: string[]; inbound: string[] }
 > = {
   "10": {
-    // Route 10 outbound list is sourced from debug stop codes;
-    // include canonical terminal ids so destination checks work.
-    outbound: [...ROUTE_10_OUTBOUND_DEBUG_STOP_CODES, AIRPORT_STOP_ID],
+    outbound: ROUTE_10_OUTBOUND_STOP_IDS,
     inbound: ROUTE_10_INBOUND_STOP_IDS,
   },
   "12": {
@@ -208,7 +227,34 @@ export async function POST(req: Request) {
         : Promise.resolve(null),
     ])
 
-  const currentStop = stops?.find((s) => s.id === stopId)
+  let stopsForContext = [...(stops ?? [])]
+  if (stopId) {
+    const row = stopsForContext.find((s) => s.id === stopId)
+    if (
+      row &&
+      (isNazarbayevOutboundPlatformRow(row) ||
+        isNazarbayevInboundPlatformRow(row)) &&
+      !resolveNazarbayevOppositeStopDbId(stopsForContext, stopId)
+    ) {
+      const codes = isNazarbayevOutboundPlatformRow(row)
+        ? [ROUTE_10_NU_INBOUND_SIDE_BUS_STOP_ID, ROUTE_10_NU_INBOUND_SIDE_STOP_CODE]
+        : [
+            ROUTE_10_NU_OUTBOUND_SIDE_LEGACY_STOP_ID,
+            ROUTE_10_NU_OUTBOUND_SIDE_STOP_ID,
+          ]
+      const { data: nuPartnerRows } = await supabase
+        .from("bus_stops")
+        .select("*")
+        .in("stop_code", codes)
+      const byId = new Map(stopsForContext.map((s) => [s.id, s]))
+      for (const r of nuPartnerRows ?? []) {
+        byId.set(r.id, r)
+      }
+      stopsForContext = Array.from(byId.values())
+    }
+  }
+
+  const currentStop = stopsForContext.find((s) => s.id === stopId)
   const currentStopDisplayName =
     responseLocale === "ru"
       ? currentStop?.name_ru || currentStop?.name
@@ -253,6 +299,36 @@ export async function POST(req: Request) {
     ? safeContextArrivals
     : apiUpcomingArrivals
   )?.slice().sort((a, b) => a.minutesAway - b.minutesAway)
+
+  const oppositeNuDbId =
+    stopId && currentStop
+      ? resolveNazarbayevOppositeStopDbId(stopsForContext, stopId)
+      : null
+  let oppositeNuArrivalsBlock = ""
+  if (oppositeNuDbId) {
+    try {
+      const oppEta = await getEtaPayload(supabase, oppositeNuDbId, false, false)
+      const lines = (oppEta.arrivals ?? []).slice(0, 8).map(
+        (a) =>
+          `- Route ${a.route_number} (${normalizeRouteDisplayName(a.route_name)}): Bus ${a.bus_label} arriving in ~${a.eta_minutes} minutes`,
+      )
+      oppositeNuArrivalsBlock =
+        lines.length > 0
+          ? lines.join("\n")
+          : "No upcoming arrivals at the opposite platform."
+    } catch {
+      oppositeNuArrivalsBlock = "Opposite platform ETA unavailable."
+    }
+  }
+
+  const oppositePlatformPromptSection =
+    oppositeNuDbId && oppositeNuArrivalsBlock
+      ? `
+
+Opposite platform across the road (Nazarbayev University second platform — use when the question targets the OTHER route 10 terminal than this stop name):
+${oppositeNuArrivalsBlock}
+`
+      : ""
 
   const languageInstruction =
     responseLocale === "ru"
@@ -300,7 +376,7 @@ ${
         .join("\n")
     : "No upcoming arrivals"
 }
-
+${oppositePlatformPromptSection}
 Active Alerts:
 ${
   alerts?.length
@@ -311,6 +387,8 @@ ${
 Rules (strict):
 - You are a stop-based transport assistant for the CURRENT kiosk stop only.
 - Source of truth for ETA is kiosk ETA feed (/api/eta via current context).
+- If the passenger asks when the next bus arrives (including Kazakh: «қашан келеді», «келесі автобус», «жақын келу»), answer with concrete minutes from Upcoming Arrivals — do not reply with only the route list from Available Routes.
+- Nazarbayev University has two platforms on route 10: toward airport vs toward city/railway. If the kiosk stop name says one direction but the passenger asks for the opposite terminal, call getDestinationRoute or state that they must cross to the opposite stop; never use this stop's ETA for the wrong direction.
 - Use structured context/tool data first; do not invent missing values.
 - Never guess arrival times, route numbers, travel times, transfers, or directions.
 - If data is missing, state it clearly and briefly.
@@ -425,12 +503,26 @@ Rules (strict):
 
   const getNextUpcomingAtOppositeStopForRoutes = async (routeNumbers: Set<string>) => {
     if (!stopId) return null
-    const oppositeStopId = OPPOSITE_STOP_BY_ID[stopId]
+    const oppositeStopId =
+      resolveNazarbayevOppositeStopDbId(stopsForContext, stopId) ??
+      OPPOSITE_STOP_BY_ID[stopId]
     if (!oppositeStopId) return null
     const oppositeEta = await getEtaPayload(supabase, oppositeStopId, false, false)
-    const matches = oppositeEta.arrivals.filter((a) =>
-      routeNumbers.has(normalizeRouteNumber(a.route_number) ?? "")
+    let matches = oppositeEta.arrivals.filter((a) =>
+      routeNumbers.has(normalizeRouteNumber(a.route_number) ?? ""),
     )
+    if (!matches.length && oppositeEta.arrivals.length > 0) {
+      matches = oppositeEta.arrivals.filter((a) =>
+        [...routeNumbers].some(
+          (want) =>
+            want === String(a.route_number ?? "").trim() ||
+            want === (normalizeRouteNumber(a.route_number) ?? ""),
+        ),
+      )
+    }
+    if (!matches.length && oppositeEta.arrivals.length > 0 && routeNumbers.has("10")) {
+      matches = oppositeEta.arrivals.filter((a) => String(a.route_number ?? "").trim() === "10")
+    }
     if (!matches.length) return null
     return matches.slice().sort((a, b) => a.eta_minutes - b.eta_minutes)[0]
   }
@@ -474,6 +566,75 @@ Rules (strict):
     const routeNumber = extractRouteNumber(question)
 
     if (destinationKey && destinationId && stopId) {
+      // NU has two platforms on route 10; DB route_stops can look "direct" while the correct
+      // boardings for the other terminal are only from the opposite platform.
+      if (
+        destinationKey === "railwayStation" &&
+        currentStop &&
+        isNazarbayevOutboundPlatformRow(currentStop)
+      ) {
+        const nuDir = getDirectionalRoutesToDestination(destinationId)
+        const oppositeRouteNums =
+          nuDir.oppositeSide.length > 0
+            ? new Set(
+                nuDir.oppositeSide
+                  .map((r) => normalizeRouteNumber(r.route_number))
+                  .filter((v): v is string => Boolean(v)),
+              )
+            : new Set<string>(["10"])
+        const oppositeArrivalNu =
+          await getNextUpcomingAtOppositeStopForRoutes(oppositeRouteNums)
+        const oppRouteList =
+          nuDir.oppositeSide.length > 0
+            ? nuDir.oppositeSide.map((r) => r.route_number).join(", ")
+            : [...oppositeRouteNums].join(", ")
+        if (oppositeArrivalNu) {
+          return responseLocale === "ru"
+            ? `Эта остановка в противоположном направлении. Перейдите на встречную остановку и сядьте на автобус ${oppositeArrivalNu.route_number}. Ближайший автобус через ${oppositeArrivalNu.eta_minutes} мин.`
+            : responseLocale === "en"
+              ? `This destination is in the opposite direction. Cross to the opposite stop and take bus ${oppositeArrivalNu.route_number}. The next bus is in ${oppositeArrivalNu.eta_minutes} minutes.`
+              : `Бұл бағыт қарсы жақта. Қарсы беттегі аялдамаға өтіп, ${oppositeArrivalNu.route_number} автобусына отырыңыз. Ең жақын автобус ${oppositeArrivalNu.eta_minutes} минуттан кейін келеді.`
+        }
+        return responseLocale === "ru"
+          ? `Эта остановка в противоположном направлении. Перейдите на встречную остановку и сядьте на автобус ${oppRouteList}, однако ближайших прибытий сейчас нет.`
+          : responseLocale === "en"
+            ? `This destination is in the opposite direction. Cross to the opposite stop and take bus ${oppRouteList}, however there are no upcoming arrivals.`
+            : `Бұл бағыт қарсы жақта. Қарсы беттегі аялдамаға өтіп, ${oppRouteList} автобусына отырыңыз, бірақ жақын келулер қазір жоқ.`
+      }
+      if (
+        destinationKey === "airport" &&
+        currentStop &&
+        isNazarbayevInboundPlatformRow(currentStop)
+      ) {
+        const nuDir = getDirectionalRoutesToDestination(destinationId)
+        const oppositeRouteNums =
+          nuDir.oppositeSide.length > 0
+            ? new Set(
+                nuDir.oppositeSide
+                  .map((r) => normalizeRouteNumber(r.route_number))
+                  .filter((v): v is string => Boolean(v)),
+              )
+            : new Set<string>(["10"])
+        const oppositeArrivalNu =
+          await getNextUpcomingAtOppositeStopForRoutes(oppositeRouteNums)
+        const oppRouteList =
+          nuDir.oppositeSide.length > 0
+            ? nuDir.oppositeSide.map((r) => r.route_number).join(", ")
+            : [...oppositeRouteNums].join(", ")
+        if (oppositeArrivalNu) {
+          return responseLocale === "ru"
+            ? `Эта остановка в противоположном направлении. Перейдите на встречную остановку и сядьте на автобус ${oppositeArrivalNu.route_number}. Ближайший автобус через ${oppositeArrivalNu.eta_minutes} мин.`
+            : responseLocale === "en"
+              ? `This destination is in the opposite direction. Cross to the opposite stop and take bus ${oppositeArrivalNu.route_number}. The next bus is in ${oppositeArrivalNu.eta_minutes} minutes.`
+              : `Бұл бағыт қарсы жақта. Қарсы беттегі аялдамаға өтіп, ${oppositeArrivalNu.route_number} автобусына отырыңыз. Ең жақын автобус ${oppositeArrivalNu.eta_minutes} минуттан кейін келеді.`
+        }
+        return responseLocale === "ru"
+          ? `Эта остановка в противоположном направлении. Перейдите на встречную остановку и сядьте на автобус ${oppRouteList}, однако ближайших прибытий сейчас нет.`
+          : responseLocale === "en"
+            ? `This destination is in the opposite direction. Cross to the opposite stop and take bus ${oppRouteList}, however there are no upcoming arrivals.`
+            : `Бұл бағыт қарсы жақта. Қарсы беттегі аялдамаға өтіп, ${oppRouteList} автобусына отырыңыз, бірақ жақын келулер қазір жоқ.`
+      }
+
       const directional = getDirectionalRoutesToDestination(destinationId)
       const hasDirectionalMatch =
         directional.sameSide.length > 0 || directional.oppositeSide.length > 0
@@ -610,13 +771,21 @@ Rules (strict):
           : `Осы аялдамадан ${destinationLabel} бағытына ${routeList} автобусына отырыңыз, бірақ жақын келулер қазір жоқ.`
     }
 
-    // Next arrival queries (EN + RU keywords)
+    // Next arrival queries (EN + RU + KK keywords; KK must come before broad "автобус" route branch below)
     if (
       questionLower.includes("next") ||
       questionLower.includes("when") ||
       questionLower.includes("когда") ||
       questionLower.includes("первый") ||
-      questionLower.includes("приедет")
+      questionLower.includes("приедет") ||
+      questionLower.includes("қашан") ||
+      questionLower.includes("келесі") ||
+      questionLower.includes("келеді") ||
+      questionLower.includes("жақын келу") ||
+      questionLower.includes("қай кезде") ||
+      questionLower.includes("qashan") ||
+      questionLower.includes("kelesi") ||
+      questionLower.includes("keledi")
     ) {
       if (routeNumber) {
         const arrivalForRoute = upcomingArrivals?.find(
@@ -637,12 +806,19 @@ Rules (strict):
       return tx.noArrivals
     }
     
-    // Route information / "when will route X arrive" queries
+    // Route information / "when will route X arrive" queries (not generic "bus + when" — handled above)
     if (
       routes?.length &&
       (questionLower.includes("route") ||
         questionLower.includes("маршрут") ||
-        questionLower.includes("автобус"))
+        (questionLower.includes("автобус") &&
+          !questionLower.includes("қашан") &&
+          !questionLower.includes("келеді") &&
+          !questionLower.includes("когда") &&
+          !questionLower.includes("when") &&
+          !questionLower.includes("next") &&
+          !questionLower.includes("qashan") &&
+          !questionLower.includes("keledi")))
     ) {
       // Try to extract a route number like "12" from the question
       if (routeNumber) {
@@ -793,7 +969,7 @@ Rules (strict):
         }),
         getDestinationRoute: tool({
           description:
-            "Get direct routes and estimated travel guidance to airport or railway station using canonical stop IDs",
+            "Get direct routes and ETA to airport or railway station. Kazakh cues: әуежай / халықаралық әуежай → airport; теміржол вокзалы / вокзал (train context) → railway_station.",
           inputSchema: z.object({
             destination: z.enum(["airport", "railway_station", "martial_palace"]),
           }),
@@ -812,6 +988,74 @@ Rules (strict):
                 : destination === "martial_palace"
                   ? CANONICAL_DESTINATIONS.martialPalace.id
                   : CANONICAL_DESTINATIONS.railwayStation.id
+
+            if (
+              destination === "railway_station" &&
+              currentStop &&
+              isNazarbayevOutboundPlatformRow(currentStop)
+            ) {
+              const nuDir = getDirectionalRoutesToDestination(destinationStopId)
+              const oppositeRouteNums =
+                nuDir.oppositeSide.length > 0
+                  ? new Set(
+                      nuDir.oppositeSide
+                        .map((r) => normalizeRouteNumber(r.route_number))
+                        .filter((v): v is string => Boolean(v)),
+                    )
+                  : new Set<string>(["10"])
+              const oppositeArrivalNu =
+                await getNextUpcomingAtOppositeStopForRoutes(oppositeRouteNums)
+              const oppRouteList =
+                nuDir.oppositeSide.length > 0
+                  ? nuDir.oppositeSide.map((r) => r.route_number).join(", ")
+                  : [...oppositeRouteNums].join(", ")
+              if (oppositeArrivalNu) {
+                return responseLocale === "ru"
+                  ? `Нужно ехать с противоположной стороны. Перейдите на встречную остановку и сядьте на автобус ${oppositeArrivalNu.route_number}. Ближайший автобус через ${formatMinutes(responseLocale, oppositeArrivalNu.eta_minutes)}.`
+                  : responseLocale === "en"
+                    ? `Opposite side required. Cross to the opposite stop and take bus ${oppositeArrivalNu.route_number}. The next bus is in ${formatMinutes(responseLocale, oppositeArrivalNu.eta_minutes)}.`
+                    : `Қарсы бағыт қажет. Қарсы беттегі аялдамаға өтіп, ${oppositeArrivalNu.route_number} автобусына отырыңыз. Ең жақын автобус ${formatMinutes(responseLocale, oppositeArrivalNu.eta_minutes)} кейін келеді.`
+              }
+              return responseLocale === "ru"
+                ? `Нужно ехать с противоположной стороны. Перейдите на встречную остановку и сядьте на автобус ${oppRouteList}, однако ближайших прибытий сейчас нет.`
+                : responseLocale === "en"
+                  ? `Opposite side required. Cross to the opposite stop and take bus ${oppRouteList}, however there are no upcoming arrivals.`
+                  : `Қарсы бағыт қажет. Қарсы беттегі аялдамаға өтіп, ${oppRouteList} автобусына отырыңыз, бірақ жақын келулер қазір жоқ.`
+            }
+            if (
+              destination === "airport" &&
+              currentStop &&
+              isNazarbayevInboundPlatformRow(currentStop)
+            ) {
+              const nuDir = getDirectionalRoutesToDestination(destinationStopId)
+              const oppositeRouteNums =
+                nuDir.oppositeSide.length > 0
+                  ? new Set(
+                      nuDir.oppositeSide
+                        .map((r) => normalizeRouteNumber(r.route_number))
+                        .filter((v): v is string => Boolean(v)),
+                    )
+                  : new Set<string>(["10"])
+              const oppositeArrivalNu =
+                await getNextUpcomingAtOppositeStopForRoutes(oppositeRouteNums)
+              const oppRouteList =
+                nuDir.oppositeSide.length > 0
+                  ? nuDir.oppositeSide.map((r) => r.route_number).join(", ")
+                  : [...oppositeRouteNums].join(", ")
+              if (oppositeArrivalNu) {
+                return responseLocale === "ru"
+                  ? `Нужно ехать с противоположной стороны. Перейдите на встречную остановку и сядьте на автобус ${oppositeArrivalNu.route_number}. Ближайший автобус через ${formatMinutes(responseLocale, oppositeArrivalNu.eta_minutes)}.`
+                  : responseLocale === "en"
+                    ? `Opposite side required. Cross to the opposite stop and take bus ${oppositeArrivalNu.route_number}. The next bus is in ${formatMinutes(responseLocale, oppositeArrivalNu.eta_minutes)}.`
+                    : `Қарсы бағыт қажет. Қарсы беттегі аялдамаға өтіп, ${oppositeArrivalNu.route_number} автобусына отырыңыз. Ең жақын автобус ${formatMinutes(responseLocale, oppositeArrivalNu.eta_minutes)} кейін келеді.`
+              }
+              return responseLocale === "ru"
+                ? `Нужно ехать с противоположной стороны. Перейдите на встречную остановку и сядьте на автобус ${oppRouteList}, однако ближайших прибытий сейчас нет.`
+                : responseLocale === "en"
+                  ? `Opposite side required. Cross to the opposite stop and take bus ${oppRouteList}, however there are no upcoming arrivals.`
+                  : `Қарсы бағыт қажет. Қарсы беттегі аялдамаға өтіп, ${oppRouteList} автобусына отырыңыз, бірақ жақын келулер қазір жоқ.`
+            }
+
             const directional = getDirectionalRoutesToDestination(destinationStopId)
             const hasDirectionalMatch =
               directional.sameSide.length > 0 || directional.oppositeSide.length > 0
@@ -944,7 +1188,13 @@ Rules (strict):
       questionLower.includes("next") ||
       questionLower.includes("arrive") ||
       questionLower.includes("когда") ||
-      questionLower.includes("приедет")
+      questionLower.includes("приедет") ||
+      questionLower.includes("қашан") ||
+      questionLower.includes("келесі") ||
+      questionLower.includes("келеді") ||
+      questionLower.includes("qashan") ||
+      questionLower.includes("kelesi") ||
+      questionLower.includes("keledi")
     ) {
       intent = "eta_query"
     } else if (
@@ -992,7 +1242,13 @@ Rules (strict):
       questionLower.includes("next") ||
       questionLower.includes("arrive") ||
       questionLower.includes("когда") ||
-      questionLower.includes("приедет")
+      questionLower.includes("приедет") ||
+      questionLower.includes("қашан") ||
+      questionLower.includes("келесі") ||
+      questionLower.includes("келеді") ||
+      questionLower.includes("qashan") ||
+      questionLower.includes("kelesi") ||
+      questionLower.includes("keledi")
     ) {
       intent = "eta_query"
     } else if (

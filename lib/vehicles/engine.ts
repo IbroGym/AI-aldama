@@ -12,6 +12,8 @@ import {
   type LatLng,
 } from "./geo"
 import {
+  isNazarbayevInboundPlatformRow,
+  isNazarbayevOutboundPlatformRow,
   isRoute10NazarbaevDemoStopId,
   isRoute10NuInboundSideStopId,
   isRoute10NuOutboundSideStopId,
@@ -524,13 +526,22 @@ export function stateServesStop(
   transit: TransitContextDTO,
   state: VehicleRuntimeState,
   route: MapRouteDTO,
-  stopId: string
+  stopId: string,
+  /** When set, NU platform direction uses stop_code + id (DB PK often ≠ GTFS id string). */
+  stopRow?: Pick<MapStopDTO, "id" | "stop_code">,
 ): boolean {
   if (route.route_number === "10") {
-    if (isRoute10NuInboundSideStopId(stopId)) {
+    const row = stopRow ?? { id: stopId, stop_code: "" }
+    if (
+      isNazarbayevInboundPlatformRow(row) ||
+      isRoute10NuInboundSideStopId(stopId)
+    ) {
       return (state.direction ?? "outbound") === "inbound"
     }
-    if (isRoute10NuOutboundSideStopId(stopId)) {
+    if (
+      isNazarbayevOutboundPlatformRow(row) ||
+      isRoute10NuOutboundSideStopId(stopId)
+    ) {
       return (state.direction ?? "outbound") === "outbound"
     }
   }
@@ -577,7 +588,7 @@ export function buildArrivalsForStop(
       continue
     }
 
-    const servesStop = stateServesStop(transit, state, route, stopId)
+    const servesStop = stateServesStop(transit, state, route, stopId, stop)
     if (!servesStop) {
       trace(
         `vehicle_id=${state.id} route_id=${state.route_id} route_number=${state.route_number} direction=${state.direction ?? "n/a"} distance_along_m=${Math.round(state.distance_along_m)} excluded=missing_stop_match`,

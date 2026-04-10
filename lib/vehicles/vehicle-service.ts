@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js"
 import { ASTANA_CENTER, getMockAstanaTransit } from "./mock-astana"
 import {
   ROUTE_10_INBOUND_STOP_IDS,
-  ROUTE_10_OUTBOUND_DEBUG_STOP_CODES,
+  ROUTE_10_OUTBOUND_STOP_IDS,
   ROUTE_12_INBOUND_STOP_IDS,
   ROUTE_12_OUTBOUND_STOP_IDS,
   ROUTE_46_INBOUND_STOP_IDS,
@@ -11,6 +11,12 @@ import {
   resolveRouteOrderOverrides,
 } from "./route-overrides"
 import { getRouteShapeOverride } from "./route-shape-overrides"
+import {
+  ROUTE_10_NU_INBOUND_SIDE_BUS_STOP_ID,
+  ROUTE_10_NU_INBOUND_SIDE_STOP_CODE,
+  ROUTE_10_NU_OUTBOUND_SIDE_LEGACY_STOP_ID,
+  ROUTE_10_NU_OUTBOUND_SIDE_STOP_ID,
+} from "./route10-nu-demo-stops"
 import {
   buildArrivalsForStop,
   computeVehicleStates,
@@ -94,7 +100,7 @@ function buildRoute10DebugOverrideManifest(stops: StopRow[]) {
     }
   }
   return {
-    outbound_entries: ROUTE_10_OUTBOUND_DEBUG_STOP_CODES.map(entry),
+    outbound_entries: ROUTE_10_OUTBOUND_STOP_IDS.map(entryByStopId),
     inbound_entries: ROUTE_10_INBOUND_STOP_IDS.map(entryByStopId),
   }
 }
@@ -125,8 +131,8 @@ export async function loadTransitFromSupabase(
     activeStops.map((s) => normalizeStopCodeForLookup(s.stop_code))
   )
   const activeStopIds = new Set(activeStops.map((s) => s.id))
-  const missingRoute10DebugStopCodes = ROUTE_10_OUTBOUND_DEBUG_STOP_CODES.filter(
-    (code) => !activeNormCodes.has(normalizeStopCodeForLookup(code))
+  const missingRoute10OutboundIds = ROUTE_10_OUTBOUND_STOP_IDS.filter(
+    (id) => !activeStopIds.has(id)
   )
   const missingRoute10InboundIds = ROUTE_10_INBOUND_STOP_IDS.filter(
     (id) => !activeStopIds.has(id)
@@ -146,13 +152,13 @@ export async function loadTransitFromSupabase(
   const missingReferencedStopIds = Array.from(
     new Set([...missingRoute12StopIds, ...missingRoute46StopIds]),
   )
-  let route10DebugStops: StopRow[] = []
-  if (missingRoute10DebugStopCodes.length > 0) {
-    const { data: debugStopsData } = await supabase
+  let route10OutboundIdStops: StopRow[] = []
+  if (missingRoute10OutboundIds.length > 0) {
+    const { data: outboundIdStopsData } = await supabase
       .from("bus_stops")
       .select("id, stop_code, name, latitude, longitude")
-      .in("stop_code", missingRoute10DebugStopCodes)
-    route10DebugStops = (debugStopsData ?? []) as StopRow[]
+      .in("id", missingRoute10OutboundIds)
+    route10OutboundIdStops = (outboundIdStopsData ?? []) as StopRow[]
   }
   let route10InboundIdStops: StopRow[] = []
   if (missingRoute10InboundIds.length > 0) {
@@ -172,6 +178,34 @@ export async function loadTransitFromSupabase(
       []) as StopRow[]
   }
 
+  /** Both NU platforms must be in transit for opposite-side ETA; include inactive rows by stop_code. */
+  let nazarbayevPairSupplementStops: StopRow[] = []
+  const mergedForNuCheck = [
+    ...activeStops,
+    ...route10OutboundIdStops,
+    ...route10InboundIdStops,
+    ...routeReferencedIdSupplementStops,
+  ]
+  const loadedNuCodes = new Set(
+    mergedForNuCheck.map((s) => normalizeStopCodeForLookup(s.stop_code)),
+  )
+  const nuRequiredCodes = [
+    ROUTE_10_NU_OUTBOUND_SIDE_STOP_ID,
+    ROUTE_10_NU_OUTBOUND_SIDE_LEGACY_STOP_ID,
+    ROUTE_10_NU_INBOUND_SIDE_BUS_STOP_ID,
+    ROUTE_10_NU_INBOUND_SIDE_STOP_CODE,
+  ]
+  const missingNuByCode = nuRequiredCodes.filter(
+    (c) => !loadedNuCodes.has(normalizeStopCodeForLookup(c)),
+  )
+  if (missingNuByCode.length > 0) {
+    const { data: nuPairData } = await supabase
+      .from("bus_stops")
+      .select("id, stop_code, name, latitude, longitude")
+      .in("stop_code", missingNuByCode)
+    nazarbayevPairSupplementStops = (nuPairData ?? []) as StopRow[]
+  }
+
   if (!routesData?.length || !stopsData?.length) {
     return null
   }
@@ -179,9 +213,10 @@ export async function loadTransitFromSupabase(
   const stopByIdForMerge = new Map<string, StopRow>()
   for (const s of [
     ...activeStops,
-    ...route10DebugStops,
+    ...route10OutboundIdStops,
     ...route10InboundIdStops,
     ...routeReferencedIdSupplementStops,
+    ...nazarbayevPairSupplementStops,
   ]) {
     stopByIdForMerge.set(s.id, s)
   }
@@ -346,11 +381,12 @@ export async function loadTransitFromSupabase(
     bus_stops_loaded_count: stops.length,
     bus_stops_active_query_count: activeStops.length,
     bus_stops_debug_code_supplement_count:
-      route10DebugStops.length +
+      route10OutboundIdStops.length +
       route10InboundIdStops.length +
-      routeReferencedIdSupplementStops.length,
+      routeReferencedIdSupplementStops.length +
+      nazarbayevPairSupplementStops.length,
     bus_stops_load_scope:
-      "Active bus_stops only (is_active=true) plus route-10 outbound stop_code, route-10 inbound id, and route-12/46 referenced stop id supplement lookups",
+      "Active bus_stops only (is_active=true) plus route-10 outbound/inbound id, route-12/46 referenced stop id, and NU pair supplement lookups",
     route10_debug_override_manifest: buildRoute10DebugOverrideManifest(
       Array.from(stopByIdForMerge.values())
     ),

@@ -73,44 +73,44 @@ export type RouteOverrideResult = {
 const MIN_RESOLVED_STOPS = 4
 const FUZZY_THRESHOLD = 0.72
 const AMBIGUITY_DELTA = 0.035
-/** Values are `public.bus_stops.stop_code` (not primary key `id`). */
-export const ROUTE_10_OUTBOUND_DEBUG_STOP_CODES: string[] = [
-  "24da8f75-2dc4-4a5d-becc-2898122eaae5",
-  "09b35dc0-2e95-4c03-b488-5eda1557f68b",
-  "04530e5f-9e64-4ae3-a962-589640451d45",
-  "782c5de3-4a10-4129-9dfb-8f19e6c95a25",
-  "4fddb84f-fb97-43b8-a619-e667607dc9de",
-  "5ea2fd87-18be-448c-ba4a-011ed7449f1e",
-  "90bbca78-c461-4348-9ec8-4911c68a3ae3",
-  "639393f6-22fb-4ab6-a13d-98f9131736b2",
-  "d78e223c-3a67-42db-91eb-12858d261cb0",
-  "3abac3ba-87c0-480c-aa39-fc3ec081e9c6",
-  "4aed197d-2627-48aa-9191-4b45ed52ddbb",
-  "f86c97bc-80c0-4a7e-bbc0-4dbff06148ab",
-  "e0b23f68-0123-40e5-ac0d-71b4af6b7274",
-  "ec4e66cb-d30e-4e6a-9539-3051048f84da",
-  "06232fac-a185-48c0-8ac7-70a493306087",
-  "e9dc4756-2990-4fa3-a0b8-a04d6312f913",
-  "870084cf-ed0b-4bbd-bea0-368b5bce2425",
-  "af31f517-9fae-414c-918f-82aba623f587",
-  "d59b3173-0b00-4498-8684-00131374163c",
-  "c885bb33-9730-4071-9429-8ad8e56f4a7e",
-  "609457bf-32ed-4cae-8bc4-56c755311af4",
-  "068882a1-be66-4fce-b012-98a2dd51acc8",
-  "0354d63f-65ad-4bef-b2e1-b79439bb9f31",
-  "12cabd75-d75d-4b82-8364-770c7812d47f",
-  "a57b56fd-5f03-4ce5-bbef-6bcc23035352",
-  "97fe4589-8e42-4006-b28b-a0fdb7f06199",
-  "0a75a06f-8e5d-48f2-ac85-8211908d4c41",
-  "bf5784b8-65f2-46b7-824e-78e29e38f3d1",
-  "ccf9d9ab-2a88-4d8f-aa7d-4d3b7eaf7a50",
-  "4b830103-8b6e-4273-aedc-b4ca2c34dda8",
-  "a6d09382-75f3-4706-85e8-2a5b775af30c",
-  "88b7ca3b-3501-4efe-b33f-701453ffa277",
-  "1617c71a-0c29-4ad2-b1b4-5ea952e80f75",
-  "19d56c0b-6421-4f46-8ec3-2781ee8b93ec",
-  "eb69b78a-a836-40b3-8ca7-a7b8aaed7ec6",
-  "0efb91bb-82ba-4082-a5d9-69e392b7510f",
+/** `public.bus_stops.id` — authoritative Route 10 outbound stop order (railway → airport). */
+export const ROUTE_10_OUTBOUND_STOP_IDS: string[] = [
+  "a9adbb0f-d9f8-43d7-9084-dc71cf757017",
+  "1dfcecbe-0598-4939-ba47-2792ca0d485b",
+  "3d46ae56-d985-4ce1-b19d-816528668c27",
+  "ffb3a537-c990-48bc-ba56-e48d0b4d9ba3",
+  "0830b7eb-4cef-4818-8675-ddfdb0c7e728",
+  "e4f74146-5a78-4296-b355-163f119017fc",
+  "f53b397e-e054-4a81-8966-8ffc91425fd8",
+  "ee15c1bb-fe6b-48f6-9914-cbabf4586359",
+  "45b5cc2c-6354-4408-a0cb-d6f5a02a8b8e",
+  "406269e4-ee95-4eed-af68-d8f42c15d678",
+  "adce11f6-9ef0-4384-9fc2-54a1c9665696",
+  "2b9116c0-b122-43a7-9cf9-388a6952c519",
+  "d32bd070-6d4e-45a8-bf89-9897080b6bfa",
+  "146de365-3e9b-4301-9a3a-e48817c4c5c0",
+  "9a8dbd07-3c87-4fc8-abb8-74dc677d4700",
+  "ed159e65-b201-480e-9bd2-7fc36378060a",
+  "e2e8f49f-00b0-4c17-978d-8e63615efee8",
+  "d3358c97-d105-4892-8952-5ac4ddb442ef",
+  "d8ec8a17-4ca9-456d-ac21-8efe94e5e660",
+  "a9566d81-a191-47aa-a4dc-70ea4c6b0e83",
+  "81604937-c91b-482d-89bd-4efb9c83ee45",
+  "95caf55d-a75a-4fe8-9175-e87554ecca1c",
+  "b639195e-9a74-4f46-868b-b6692420a3de",
+  "21768934-279d-4ace-a962-0e638546a0ef",
+  "5b8a51df-21e2-4493-a2e5-2ed963d69781",
+  "d2d7b19b-4136-4b44-b832-1c0cbe5fa7af",
+  "e6103f47-14ec-4c2f-beaf-30afee8480c6",
+  "f025bd0e-f9ee-488c-955d-98b363ed05b8",
+  "0f554a3d-dceb-47cf-bdc9-3556c836f5db",
+  "6fb11b7b-f624-426f-b382-5b905bf2c2a8",
+  "2bf57317-982f-477e-ace9-107adf538820",
+  "9cd87750-8777-4035-bb54-02804977f733",
+  "b7a0f6ac-1880-4249-9573-eb48c7cc9a35",
+  "d5332b55-fde0-4dcb-a9bd-89e563bcc6f2",
+  "19362545-6900-4aae-9f6c-081a2a5e16b0",
+  "8c4ad112-e945-4ebf-ace1-1ac761470bfc",
 ]
 
 /** `public.bus_stops.id` — authoritative Route 10 inbound stop order (airport → railway). */
@@ -698,12 +698,12 @@ export function resolveRouteOrderOverrides(params: {
     if (def.route_number === "10") {
       const route = byDirection.outbound ?? byDirection.inbound
       if (!route) continue
-      const outboundReport = resolveExplicitStopCodeSequence(
+      const outboundReport = resolveExplicitStopIdSequence(
         "10",
         "outbound",
         route,
-        ROUTE_10_OUTBOUND_DEBUG_STOP_CODES,
-        stopsByNormalizedCode
+        ROUTE_10_OUTBOUND_STOP_IDS,
+        stopById
       )
       const inboundReport = resolveExplicitStopIdSequence(
         "10",

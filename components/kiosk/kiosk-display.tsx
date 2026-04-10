@@ -31,7 +31,10 @@ import {
   type SmoothedEtaArrival,
 } from "@/hooks/use-smoothed-simulation-etas"
 import { KIOSK_TEATR_ASTANA_OPERA_STOP_ID } from "@/lib/kiosk/kiosk-selector-extra-stop-ids"
-import { ROUTE_10_NU_INBOUND_SIDE_BUS_STOP_ID } from "@/lib/vehicles/route10-nu-demo-stops"
+import {
+  ROUTE_10_NU_INBOUND_SIDE_BUS_STOP_ID,
+  ROUTE_10_NU_OUTBOUND_SIDE_STOP_ID,
+} from "@/lib/vehicles/route10-nu-demo-stops"
 
 interface KioskDisplayProps {
   stops: BusStop[]
@@ -54,6 +57,7 @@ const STOP_ROUTE_OVERRIDES_BY_CODE: Record<string, string[]> = {
 
 const STOP_ROUTE_OVERRIDES_BY_ID: Record<string, string[]> = {
   [ROUTE_10_NU_INBOUND_SIDE_BUS_STOP_ID]: ["10"],
+  [ROUTE_10_NU_OUTBOUND_SIDE_STOP_ID]: ["10"],
   /** Matches `ROUTE_12_INBOUND_STOP_IDS` + `ROUTE_46_INBOUND_STOP_IDS` in route-overrides. */
   [KIOSK_TEATR_ASTANA_OPERA_STOP_ID]: ["12", "46"],
 }

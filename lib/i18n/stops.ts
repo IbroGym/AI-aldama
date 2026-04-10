@@ -31,14 +31,14 @@ const STOP_NAME_BY_ID: Record<string, StopNameTranslations> = {
     ru: "Teatr Astana Opera (в сторону ж/д вокзала)",
     en: "Astana Opera Theatre (toward railway station)",
   },
-  // Outbound-side Nazarbayev U. — keep in sync with `ROUTE_10_NU_OUTBOUND_SIDE_STOP_ID`
+  // Outbound-side Nazarbayev U. — GTFS / legacy row (`ROUTE_10_NU_OUTBOUND_SIDE_LEGACY_STOP_ID`)
   "12cabd75-d75d-4b82-8364-770c7812d47f": {
     kk: "Назарбаев Университеті (аэропортқа қарай)",
     ru: "Назарбаев Университет (в сторону аэропорта)",
     en: "Nazarbayev University (toward airport)",
   },
-  // Same platform; `public.bus_stops.id` differs in some deployments.
-  "21768534-279d-4aca-a982-0e51814da8e4": {
+  // Production `bus_stops.id` (`ROUTE_10_NU_OUTBOUND_SIDE_STOP_ID`)
+  "21768934-279d-4ace-a962-0e638546a0ef": {
     kk: "Назарбаев Университеті (аэропортқа қарай)",
     ru: "Назарбаев Университет (в сторону аэропорта)",
     en: "Nazarbayev University (toward airport)",
