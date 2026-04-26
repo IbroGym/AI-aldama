@@ -1,4 +1,5 @@
 import { createServerClient } from '@supabase/ssr'
+import type { User } from '@supabase/supabase-js'
 import { NextResponse, type NextRequest } from 'next/server'
 
 export async function updateSession(request: NextRequest) {
@@ -56,9 +57,22 @@ export async function updateSession(request: NextRequest) {
 
   // IMPORTANT: If you remove getUser() and you use server-side rendering
   // with the Supabase client, your users may be randomly logged out.
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  let user: User | null = null
+  try {
+    const {
+      data: { user: u },
+    } = await supabase.auth.getUser()
+    user = u
+  } catch {
+    // e.g. transient network failure — do not fail the whole request (was causing 404s in dev Edge middleware)
+    if (isDashboardRoute) {
+      const url = request.nextUrl.clone()
+      url.pathname = '/auth/login'
+      url.searchParams.set('next', pathname)
+      return NextResponse.redirect(url)
+    }
+    return supabaseResponse
+  }
 
   if (isDashboardRoute) {
     // If not logged in -> отправляем на логин
@@ -77,7 +91,6 @@ export async function updateSession(request: NextRequest) {
       .maybeSingle()
 
     const role = profile?.role as string | undefined
-    const isAdminOrOperator = role === 'admin' || role === 'operator'
 
     // Настройки доступны только админам
     if (pathname.startsWith('/dashboard/settings') && role !== 'admin') {
@@ -104,7 +117,7 @@ export async function updateSession(request: NextRequest) {
   }
 
   // IMPORTANT: You *must* return the supabaseResponse object as it is.
-  // If you're creating a new response object with NextResponse.next() make sure to:
+  // If you are creating a new response object with NextResponse.next() make sure to:
   // 1. Pass the request in it, like so:
   //    const myNewResponse = NextResponse.next({ request })
   // 2. Copy over the cookies, like so:

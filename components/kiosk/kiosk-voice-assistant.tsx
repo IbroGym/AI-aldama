@@ -83,6 +83,7 @@ export function KioskVoiceAssistant({
   const [speechSupported, setSpeechSupported] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null)
+  const recognitionActiveRef = useRef(false)
 
   // Scroll to bottom on new messages
   useEffect(() => {
@@ -95,6 +96,7 @@ export function KioskVoiceAssistant({
     setInput("")
     setIsLoading(false)
     setIsListening(false)
+    recognitionActiveRef.current = false
     recognitionRef.current?.stop()
     if ("speechSynthesis" in window) {
       window.speechSynthesis.cancel()
@@ -171,18 +173,27 @@ export function KioskVoiceAssistant({
       recognition.onresult = (event: SpeechRecognitionEvent) => {
         const transcript = event.results[0][0].transcript
         setInput(transcript)
+        recognitionActiveRef.current = false
         setIsListening(false)
       }
 
       recognition.onerror = () => {
+        recognitionActiveRef.current = false
         setIsListening(false)
       }
 
       recognition.onend = () => {
+        recognitionActiveRef.current = false
         setIsListening(false)
       }
 
       recognitionRef.current = recognition
+    }
+
+    return () => {
+      recognitionActiveRef.current = false
+      recognitionRef.current?.abort()
+      recognitionRef.current = null
     }
   }, [locale])
 
@@ -192,12 +203,20 @@ export function KioskVoiceAssistant({
       return
     }
 
-    if (isListening) {
+    if (isListening || recognitionActiveRef.current) {
       recognitionRef.current.stop()
+      recognitionActiveRef.current = false
       setIsListening(false)
     } else {
-      recognitionRef.current.start()
-      setIsListening(true)
+      try {
+        recognitionRef.current.start()
+        recognitionActiveRef.current = true
+        setIsListening(true)
+      } catch {
+        // Guard against repeated start() when recognition is still active.
+        recognitionActiveRef.current = false
+        setIsListening(false)
+      }
     }
   }
 

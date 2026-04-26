@@ -1,0 +1,15 @@
+[Unit]
+Description=Bus Stop Staging (Next.js)
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+WorkingDirectory=/opt/bus-stop-system-architecture
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/npm run start:public
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
