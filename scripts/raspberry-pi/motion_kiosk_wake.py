@@ -51,12 +51,24 @@ def post_motion_event() -> None:
             raise RuntimeError(f"Unexpected status {resp.status}")
 
 
+def setup_pin_factory() -> None:
+    try:
+        from gpiozero import Device
+        from gpiozero.pins.lgpio import LGPIOFactory
+
+        Device.pin_factory = LGPIOFactory()
+    except ImportError:
+        pass
+
+
 def main() -> None:
     try:
         from gpiozero import MotionSensor
     except ImportError:
-        print("Install gpiozero: sudo apt install python3-gpiozero", file=sys.stderr)
+        print("Install gpiozero: sudo apt install python3-gpiozero python3-lgpio", file=sys.stderr)
         sys.exit(1)
+
+    setup_pin_factory()
 
     pin = int(os.environ.get("MOTION_GPIO_PIN", "17"))
     cooldown = float(os.environ.get("COOLDOWN_SEC", "3"))
