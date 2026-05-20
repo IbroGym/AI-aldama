@@ -11,6 +11,7 @@ import {
   ROUTE_10_NU_OUTBOUND_SIDE_LEGACY_STOP_ID,
   ROUTE_10_NU_OUTBOUND_SIDE_STOP_ID,
 } from "@/lib/vehicles/route10-nu-demo-stops"
+import { fetchKioskActiveAlerts } from "@/lib/alerts/kiosk-active-alerts"
 import { getEtaPayload } from "@/lib/vehicles/vehicle-service"
 
 export default async function KioskPage() {
@@ -83,11 +84,7 @@ export default async function KioskPage() {
     })
   }
 
-  const { data: alerts } = await supabase
-    .from("alerts")
-    .select("*")
-    .eq("is_active", true)
-    .order("severity", { ascending: false })
+  const alerts = await fetchKioskActiveAlerts(supabase)
 
   return (
     <KioskShell>

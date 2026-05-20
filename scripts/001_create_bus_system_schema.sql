@@ -201,6 +201,18 @@ CREATE POLICY "Allow admin update to buses" ON buses FOR UPDATE TO authenticated
   EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('admin', 'operator'))
 );
 
+CREATE POLICY "alerts_insert_admin_operator" ON alerts FOR INSERT TO authenticated WITH CHECK (
+  EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('admin', 'operator'))
+);
+CREATE POLICY "alerts_update_admin_operator" ON alerts FOR UPDATE TO authenticated USING (
+  EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('admin', 'operator'))
+) WITH CHECK (
+  EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('admin', 'operator'))
+);
+CREATE POLICY "alerts_delete_admin" ON alerts FOR DELETE TO authenticated USING (
+  EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin')
+);
+
 -- Allow system to insert GPS and ETA data
 CREATE POLICY "Allow system insert to bus_positions" ON bus_positions FOR INSERT WITH CHECK (true);
 CREATE POLICY "Allow system insert to eta_predictions" ON eta_predictions FOR INSERT WITH CHECK (true);
