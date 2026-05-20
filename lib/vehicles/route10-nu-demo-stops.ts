@@ -88,6 +88,23 @@ export function isNazarbayevInboundPlatformRow(
  * Returns the opposite NU platform's `bus_stops.id` for getEtaPayload / vehicles API.
  * Uses stop_code matching because DB primary keys are not the GTFS ids.
  */
+/** Graph stop id on the opposite NU platform (route 10 inbound ↔ outbound). */
+export function resolveNazarbayevOppositeRoutingStopId(
+  routingStopId: string,
+): string | null {
+  const id = routingStopId.trim().toLowerCase()
+  if (
+    id === ROUTE_10_NU_OUTBOUND_SIDE_STOP_ID.toLowerCase() ||
+    id === ROUTE_10_NU_OUTBOUND_SIDE_LEGACY_STOP_ID.toLowerCase()
+  ) {
+    return ROUTE_10_NU_INBOUND_SIDE_BUS_STOP_ID
+  }
+  if (id === ROUTE_10_NU_INBOUND_SIDE_BUS_STOP_ID.toLowerCase()) {
+    return ROUTE_10_NU_OUTBOUND_SIDE_STOP_ID
+  }
+  return null
+}
+
 export function resolveNazarbayevOppositeStopDbId(
   stops: NazarbayevStopRow[],
   currentStopId: string | undefined,

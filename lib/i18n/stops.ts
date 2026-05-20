@@ -1,4 +1,5 @@
 import type { Locale } from "@/lib/i18n/config"
+import { STOP_TRANSLATIONS_BY_CODE } from "@/lib/i18n/stop-translations-by-code"
 
 type StopNameTranslations = Partial<Record<Locale, string>>
 type StopLocalizedNameFields = {
@@ -20,6 +21,16 @@ const STOP_NAME_BY_CODE: Record<string, StopNameTranslations> = {
     kk: "Назарбаев Университеті (аэропортқа қарай)",
     ru: "Назарбаев Университет (в сторону аэропорта)",
     en: "Nazarbayev University (toward airport)",
+  },
+  "0a75a06f-8e5d-48f2-ac85-8211908d4c41": {
+    kk: "Stella Zvezda Astany",
+    ru: "Стелла Звезда Астаны",
+    en: "Stella Zvezda Astany",
+  },
+  "06eee664-f6eb-43f7-ac6a-de0d6e693a27": {
+    kk: "Stela Zvezda Astany",
+    ru: "Стела Звезда Астаны",
+    en: "Stela Zvezda Astany",
   },
 }
 
@@ -91,4 +102,34 @@ export function getLocalizedStopName(
 
   return rawName
 }
+
+/** Fill missing name_* from kiosk translation tables (GTFS often has Latin `name` only). */
+export function mergeStopLocalizedFields<
+  T extends StopLocalizedNameFields & {
+    id: string
+    stop_code: string
+    name: string
+  },
+>(stop: T): T {
+  const byCode = STOP_NAME_BY_CODE[stop.stop_code]
+  const byId = STOP_NAME_BY_ID[stop.id]
+  const fromCsv =
+    STOP_TRANSLATIONS_BY_CODE[stop.stop_code] ??
+    STOP_TRANSLATIONS_BY_CODE[stop.id]
+  return {
+    ...stop,
+    name_ru:
+      stop.name_ru ?? byCode?.ru ?? byId?.ru ?? fromCsv?.ru ?? null,
+    name_kk:
+      stop.name_kk ?? byCode?.kk ?? byId?.kk ?? fromCsv?.kk ?? null,
+    name_en:
+      stop.name_en ?? byCode?.en ?? byId?.en ?? fromCsv?.en ?? null,
+  }
+}
+
+export {
+  refineDestinationSearchHits,
+  searchStopsByName,
+  stripStopQueryStopwords,
+} from "@/lib/i18n/stop-search"
 

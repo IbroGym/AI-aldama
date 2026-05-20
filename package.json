@@ -10,7 +10,8 @@
     "start": "next start",
     "start:public": "next start --hostname 0.0.0.0 --port 3001",
     "staging": "npm run build && npm run start:public",
-    "gtfs:import": "node tools/import-gtfs.mjs"
+    "gtfs:import": "node tools/import-gtfs.mjs",
+    "i18n:stops": "node tools/generate-stop-translations-ts.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

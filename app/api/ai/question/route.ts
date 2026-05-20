@@ -2,6 +2,12 @@ import { generateText, tool } from "ai"
 import { z } from "zod"
 import { createClient } from "@/lib/supabase/server"
 import { isLocale, type Locale } from "@/lib/i18n/config"
+import {
+  mergeStopLocalizedFields,
+  refineDestinationSearchHits,
+  searchStopsByName,
+  stripStopQueryStopwords,
+} from "@/lib/i18n/stops"
 import { getEtaPayload } from "@/lib/vehicles/vehicle-service"
 import {
   ROUTE_10_INBOUND_STOP_IDS,
@@ -21,6 +27,24 @@ import {
   resolveNazarbayevOppositeStopDbId,
 } from "@/lib/vehicles/route10-nu-demo-stops"
 import { findLandmarkByQuery, landmarkDisplayName } from "@/lib/transit/landmarks"
+import {
+  createMvpRoutingContext,
+  extractDestinationStopQueryFromQuestion,
+  filterOppositeRoutesWithDirectRide,
+  getDirectionalRoutesBetween,
+  isDirectBusRideBetween,
+  normalizeDestinationStopQuery,
+  pickDestinationRoutingStopId,
+  planBestItinerary,
+  planFewestRides,
+  resolveOriginRoutingStopId,
+  resolveRoutingOriginCandidates,
+  WALK_TRANSFER_ROUTE_NUMBER,
+  resolveStopIdForRouting,
+  searchStopsForRouting,
+  stopServedByMvpRoutes,
+  type StopRoutingRow,
+} from "@/lib/transit/ai-routing"
 
 const CANONICAL_DESTINATIONS = {
   airport: {
@@ -223,14 +247,6 @@ type StopContextRow = {
 
 type RouteStopJoin = { route_id: string; stop_id: string; stop_sequence: number }
 
-type RideLeg = {
-  routeId: string
-  routeNumber: string
-  routeName: string
-  fromStopId: string
-  toStopId: string
-}
-
 function stopDisplayName(stop: StopContextRow, locale: Locale): string {
   if (locale === "ru") return stop.name_ru || stop.name
   if (locale === "kk") return stop.name_kk || stop.name
@@ -249,44 +265,12 @@ function resolveStopRef(ref: string, stops: StopContextRow[]): StopContextRow | 
   return stops.find((s) => s.id === t) ?? null
 }
 
-function tokenizeSearch(q: string): string[] {
-  return q
-    .toLowerCase()
-    .split(/\s+/)
-    .map((w) => w.replace(/[^a-zа-яёәғқңөүұһі0-9]/gi, ""))
-    .filter((w) => w.length >= 2)
-}
-
 function searchStopsLocal(
   query: string,
   stops: StopContextRow[],
   limit: number
 ): StopContextRow[] {
-  const qLower = query.trim().toLowerCase()
-  if (!qLower) return []
-  const tokens = tokenizeSearch(query)
-  const scored: { stop: StopContextRow; score: number }[] = []
-  for (const s of stops) {
-    let score = 0
-    const hay = [
-      s.stop_code,
-      s.name,
-      s.name_ru ?? "",
-      s.name_kk ?? "",
-      s.name_en ?? "",
-      s.address ?? "",
-      s.zone ?? "",
-    ]
-      .join(" ")
-      .toLowerCase()
-    if (hay.includes(qLower)) score += 50
-    for (const tok of tokens) {
-      if (tok && hay.includes(tok)) score += 10
-    }
-    if (score > 0) scored.push({ stop: s, score })
-  }
-  scored.sort((a, b) => b.score - a.score)
-  return scored.slice(0, limit).map((x) => x.stop)
+  return searchStopsByName(query, stops, limit)
 }
 
 function haversineM(aLat: number, aLon: number, bLat: number, bLon: number): number {
@@ -311,60 +295,6 @@ function groupSortedRouteStops(routeStops: RouteStopJoin[]): Map<string, RouteSt
     list.sort((a, b) => a.stop_sequence - b.stop_sequence)
   }
   return m
-}
-
-function buildRideAdjacency(
-  grouped: Map<string, RouteStopJoin[]>,
-  routeMeta: Map<string, { route_number: string; route_name: string }>
-): Map<string, RideLeg[]> {
-  const adj = new Map<string, RideLeg[]>()
-  for (const [routeId, seq] of grouped) {
-    const meta = routeMeta.get(routeId)
-    if (!meta) continue
-    const stopIds = seq.map((x) => x.stop_id)
-    for (let i = 0; i < stopIds.length; i++) {
-      const fromId = stopIds[i]
-      for (let j = i + 1; j < stopIds.length; j++) {
-        const toId = stopIds[j]
-        const leg: RideLeg = {
-          routeId,
-          routeNumber: meta.route_number,
-          routeName: meta.route_name,
-          fromStopId: fromId,
-          toStopId: toId,
-        }
-        const list = adj.get(fromId) ?? []
-        list.push(leg)
-        adj.set(fromId, list)
-      }
-    }
-  }
-  return adj
-}
-
-function planFewestRides(
-  fromId: string,
-  toId: string,
-  adj: Map<string, RideLeg[]>,
-  maxLegs: number
-): RideLeg[] | null {
-  if (fromId === toId) return []
-  const queue: { stop: string; path: RideLeg[] }[] = [{ stop: fromId, path: [] }]
-  const visited = new Set<string>([fromId])
-  while (queue.length) {
-    const { stop, path } = queue.shift()!
-    if (path.length >= maxLegs) continue
-    for (const leg of adj.get(stop) ?? []) {
-      const next = leg.toStopId
-      const nextPath = [...path, leg]
-      if (next === toId) return nextPath
-      if (!visited.has(next)) {
-        visited.add(next)
-        queue.push({ stop: next, path: nextPath })
-      }
-    }
-  }
-  return null
 }
 
 function directRoutesBetweenStopsDb(
@@ -442,6 +372,8 @@ export async function POST(req: Request) {
     }
   }
 
+  stopsForContext = stopsForContext.map((s) => mergeStopLocalizedFields(s))
+
   const currentStop = stopsForContext.find((s) => s.id === stopId)
   const currentStopDisplayName =
     responseLocale === "ru"
@@ -459,7 +391,11 @@ export async function POST(req: Request) {
     ])
   )
   const groupedSortedRouteStops = groupSortedRouteStops(activeRouteStops)
-  const rideAdjacency = buildRideAdjacency(groupedSortedRouteStops, routeMetaById)
+  const mvpRoutingContext = createMvpRoutingContext(
+    activeRoutes,
+    stopsForContext as StopRoutingRow[],
+    activeRouteStops
+  )
 
   // Use the same ETA source as /api/eta (simulation snapshot)
   const apiUpcomingArrivals = etaPayload?.arrivals?.map((eta) => ({
@@ -601,12 +537,13 @@ Rules (strict):
 Tool playbook (typical call order — skip steps that do not apply):
 1) Next bus / ETA at THIS kiosk stop: use Upcoming Arrivals context first; if a specific route is asked, use getNextArrival(routeNumber).
 2) Airport / railway station / martial arts palace from here: prefer getDestinationRoute (handles platform nuance); do not override with guessed ETAs.
-3) Named place or landmark: searchStops(query) first. If results are empty or clearly unrelated (e.g. passenger says Bayterek / Байтерек / opera / mall name): getNearestStopsToLandmark(placeQuery) → pick the nearest sensible stop → planTransitBetweenStops(Current kiosk Stop ID, thatStopId) (or direct route tool). Explain boarding/alighting and add approximate straight-line walk from alighting stop to the landmark (actual walking path may differ).
-4) A → B (two stops): getDirectRoutesBetweenStops(fromStopId, toStopId). If no direct route, planTransitBetweenStops(originStopId, destinationStopId); increase maxTransfers only if the tool says no path within limit.
-5) "Plan my day" / several places: for each place use step (3) (searchStops or getNearestStopsToLandmark) → order stops geographically or as the passenger asked → for each consecutive pair call step (4) using stop UUIDs → optionally getEtaForStop on the current kiosk stop or next boarding stop for "when to leave"; mention getAlerts if relevant.
-6) "What routes serve this stop?" when stop is known: getRoutesAtStop(stopId); for the kiosk use Stop ID from Current Context above; for another place use UUID from searchStops.
-7) Explore one route line: getStopsOnRoute(routeNumber); timetable questions: getRouteSchedule(routeNumber).
-8) Walking alternative nearby: getNearbyStops(centerStopId) after resolving center via searchStops or kiosk context.
+3) Any named bus stop in the database ("как доехать до …", "доехать до …", with or without the word "остановка"): the server answers automatically for all stops on routes 10, 12, 46 — same format as Stella Zvezda (direct bus or transfers). Examples: "Как доехать до Биржан сал?", "до остановки Медицинский университет".
+4) Named landmark (not a bus stop name): searchStops or getNearestStopsToLandmark → then getRouteToBusStop or planTransitBetweenStops from kiosk Stop ID.
+5) A → B when both stop UUIDs are already known: getDirectRoutesBetweenStops or planTransitBetweenStops; prefer getRouteToBusStop when the passenger only gives a name.
+6) "Plan my day" / several places: for each place use getRouteToBusStop or step (4) → optionally getEtaForStop; mention getAlerts if relevant.
+7) "What routes serve this stop?" when stop is known: getRoutesAtStop(stopId); for the kiosk use Stop ID from Current Context above.
+8) Explore one route line: getStopsOnRoute(routeNumber); timetable questions: getRouteSchedule(routeNumber).
+9) Walking alternative nearby: getNearbyStops(centerStopId) after resolving center via searchStops or kiosk context.
 
 For multi-stop itineraries only: you may answer with a compact numbered list (each line: route + from → to); still stay factual and short; never fabricate legs.
 
@@ -633,46 +570,34 @@ For multi-stop itineraries only: you may answer with a compact numbered list (ea
   }
 
   const getDirectionalRoutesToDestination = (destinationStopId: string) => {
-    if (!stopId || !activeRoutes.length) {
+    if (!stopId || !currentStop || !activeRoutes.length) {
       return { sameSide: [] as typeof activeRoutes, oppositeSide: [] as typeof activeRoutes }
     }
+    const originRoutingId = resolveOriginRoutingStopId(
+      currentStop as StopRoutingRow,
+      stopsForContext as StopRoutingRow[]
+    )
+    const destRow = stopsForContext.find((s) => s.id === destinationStopId)
+    const destId = destRow
+      ? resolveStopIdForRouting(destRow as StopRoutingRow, stopsForContext as StopRoutingRow[])
+      : destinationStopId
 
-    const sameSideRouteNumbers = new Set<string>()
-    const oppositeSideRouteNumbers = new Set<string>()
-
-    for (const route of activeRoutes) {
-      const routeNumber = normalizeRouteNumber(route.route_number)
-      if (!routeNumber) continue
-      const directional = DIRECTIONAL_ROUTE_STOPS[routeNumber]
-      if (!directional) continue
-
-      const outFrom = directional.outbound.indexOf(stopId)
-      const outTo = directional.outbound.indexOf(destinationStopId)
-      const inFrom = directional.inbound.indexOf(stopId)
-      const inTo = directional.inbound.indexOf(destinationStopId)
-
-      if (outFrom >= 0 && outTo >= 0 && outFrom < outTo) {
-        sameSideRouteNumbers.add(routeNumber)
-      } else if (outFrom >= 0 && outTo >= 0 && outFrom > outTo) {
-        oppositeSideRouteNumbers.add(routeNumber)
-      } else if (inFrom >= 0 && inTo >= 0 && inFrom < inTo) {
-        sameSideRouteNumbers.add(routeNumber)
-      } else if (inFrom >= 0 && inTo >= 0 && inFrom > inTo) {
-        oppositeSideRouteNumbers.add(routeNumber)
-      } else if (outFrom >= 0 && inTo >= 0) {
-        oppositeSideRouteNumbers.add(routeNumber)
-      } else if (inFrom >= 0 && outTo >= 0) {
-        oppositeSideRouteNumbers.add(routeNumber)
-      }
-    }
-
+    const { sameSide, oppositeSide } = getDirectionalRoutesBetween(
+      originRoutingId,
+      destId,
+      activeRoutes,
+      mvpRoutingContext
+    )
+    const byNumber = new Map(
+      activeRoutes.map((r) => [normalizeRouteNumber(r.route_number) ?? "", r])
+    )
     return {
-      sameSide: activeRoutes.filter((r) =>
-        sameSideRouteNumbers.has(normalizeRouteNumber(r.route_number) ?? "")
-      ),
-      oppositeSide: activeRoutes.filter((r) =>
-        oppositeSideRouteNumbers.has(normalizeRouteNumber(r.route_number) ?? "")
-      ),
+      sameSide: sameSide
+        .map((m) => byNumber.get(m.routeNumber))
+        .filter((r): r is (typeof activeRoutes)[number] => Boolean(r)),
+      oppositeSide: oppositeSide
+        .map((m) => byNumber.get(m.routeNumber))
+        .filter((r): r is (typeof activeRoutes)[number] => Boolean(r)),
     }
   }
 
@@ -742,8 +667,299 @@ For multi-stop itineraries only: you may answer with a compact numbered list (ea
     return matches.slice().sort((a, b) => a.eta_minutes - b.eta_minutes)[0]
   }
 
+  const runRouteToBusStop = async (
+    destinationStopQuery: string,
+    maxTransfers = 3
+  ): Promise<string> => {
+    if (!stopId || !currentStop) {
+      return responseLocale === "ru"
+        ? "Текущая остановка киоска не определена."
+        : responseLocale === "en"
+          ? "Current kiosk stop is unknown."
+          : "Киоск аялдамасы анықталмады."
+    }
+
+    const cleaned = normalizeDestinationStopQuery(destinationStopQuery)
+    if (!cleaned) {
+      return responseLocale === "ru"
+        ? "Укажите название остановки назначения."
+        : responseLocale === "en"
+          ? "Please provide the destination stop name."
+          : "Баратын аялдама атауын жазыңыз."
+    }
+
+    const searchQuery = stripStopQueryStopwords(cleaned)
+    let hits = searchStopsForRouting(
+      searchQuery || cleaned,
+      stopsForContext as StopRoutingRow[],
+      6
+    )
+    hits = refineDestinationSearchHits(
+      searchQuery || cleaned,
+      hits as StopRoutingRow[]
+    )
+    if (!hits.length) {
+      return responseLocale === "ru"
+        ? `Остановка «${cleaned}» не найдена в базе. Проверьте название.`
+        : responseLocale === "en"
+          ? `Stop "${cleaned}" was not found in the database.`
+          : `«${cleaned}» аялдамасы дерекқорда табылмады.`
+    }
+
+    const destRow = hits[0]
+    const destLabel = stopDisplayName(destRow as StopContextRow, responseLocale)
+    const originRoutingId = resolveOriginRoutingStopId(
+      currentStop as StopRoutingRow,
+      stopsForContext as StopRoutingRow[]
+    )
+    const destRoutingId = pickDestinationRoutingStopId(
+      originRoutingId,
+      hits,
+      stopsForContext as StopRoutingRow[],
+      mvpRoutingContext
+    )
+
+    if (originRoutingId === destRoutingId) {
+      return responseLocale === "ru"
+        ? `Вы уже на остановке «${destLabel}».`
+        : responseLocale === "en"
+          ? `You are already at "${destLabel}".`
+          : `Сіз «${destLabel}» аялдамасындасыз.`
+    }
+
+    const serving = stopServedByMvpRoutes(destRoutingId, mvpRoutingContext)
+    if (!serving.length) {
+      return responseLocale === "ru"
+        ? `Остановка «${destLabel}» не обслуживается маршрутами 10, 12, 46.`
+        : responseLocale === "en"
+          ? `"${destLabel}" is not on routes 10, 12, or 46.`
+          : `«${destLabel}» 10, 12, 46 маршруттарында жоқ.`
+    }
+
+    const originCandidates = resolveRoutingOriginCandidates(
+      originRoutingId,
+      currentStop as StopRoutingRow,
+      mvpRoutingContext
+    )
+
+    type DirectHint = {
+      kind: "same" | "opposite"
+      routeNums: Set<string>
+      crossPlatform: boolean
+      hopCost: number
+    }
+    let bestDirect: DirectHint | null = null
+
+    for (const origin of originCandidates) {
+      const dir = getDirectionalRoutesBetween(
+        origin.stopId,
+        destRoutingId,
+        activeRoutes,
+        mvpRoutingContext
+      )
+      const crossPenalty = origin.crossPlatform ? 4 : 0
+
+      const directional = mvpRoutingContext.directionalByRoute
+      const boardingStopId = origin.stopId
+
+      const sameReachable = dir.sameSide.filter((r) =>
+        isDirectBusRideBetween(
+          boardingStopId,
+          destRoutingId,
+          r.routeNumber,
+          directional
+        )
+      )
+      if (sameReachable.length > 0) {
+        const hint: DirectHint = {
+          kind: "same",
+          routeNums: new Set(sameReachable.map((r) => r.routeNumber)),
+          crossPlatform: origin.crossPlatform,
+          hopCost: crossPenalty,
+        }
+        if (!bestDirect || hint.hopCost < bestDirect.hopCost) {
+          bestDirect = hint
+        }
+      }
+
+      const oppositeReachable = filterOppositeRoutesWithDirectRide(
+        boardingStopId,
+        destRoutingId,
+        dir.oppositeSide,
+        directional
+      )
+      if (oppositeReachable.length > 0) {
+        const hint: DirectHint = {
+          kind: "opposite",
+          routeNums: new Set(oppositeReachable.map((r) => r.routeNumber)),
+          crossPlatform: true,
+          hopCost: crossPenalty + 4,
+        }
+        if (!bestDirect || hint.hopCost < bestDirect.hopCost) {
+          bestDirect = hint
+        }
+      }
+    }
+
+    const maxBusLegs = maxTransfers + 1
+    const itinerary = planBestItinerary(
+      originCandidates,
+      destRoutingId,
+      mvpRoutingContext.adjacency,
+      mvpRoutingContext.directionalByRoute,
+      maxBusLegs
+    )
+    const path = itinerary?.path
+    const busLegCount =
+      path?.filter((leg) => leg.routeNumber !== WALK_TRANSFER_ROUTE_NUMBER)
+        .length ?? 0
+    const preferItineraryResponse =
+      busLegCount > 1 ||
+      (path?.some((leg) => leg.routeNumber === WALK_TRANSFER_ROUTE_NUMBER) ??
+        false)
+
+    if (bestDirect?.kind === "same" && !preferItineraryResponse) {
+      const routeNums = bestDirect.routeNums
+      const next = bestDirect.crossPlatform
+        ? await getNextUpcomingAtOppositeStopForRoutes(routeNums)
+        : getNextUpcomingForRouteNumbers(routeNums)
+      const routeList = [...routeNums]
+        .map((n) => formatRouteLabel(responseLocale, n))
+        .join(", ")
+      const crossNote = bestDirect.crossPlatform
+        ? responseLocale === "ru"
+          ? "Перейдите на встречную остановку. "
+          : responseLocale === "en"
+            ? "Cross to the opposite stop. "
+            : "Қарсы аялдамаға өтіңіз. "
+        : ""
+      if (next) {
+        return responseLocale === "ru"
+          ? `До «${destLabel}»: ${crossNote}сядьте на ${formatRouteLabel(responseLocale, next.route)} (${routeList}). Ближайший автобус через ${formatMinutes(responseLocale, next.minutesAway)}.`
+          : responseLocale === "en"
+            ? `To "${destLabel}": ${crossNote}take ${formatRouteLabel(responseLocale, next.route)} (${routeList}). Next bus in ${formatMinutes(responseLocale, next.minutesAway)}.`
+            : `«${destLabel}» бағытына: ${crossNote}${formatRouteLabel(responseLocale, next.route)} (${routeList}). ${formatMinutes(responseLocale, next.minutesAway)} кейін.`
+      }
+      return responseLocale === "ru"
+        ? `До «${destLabel}» без пересадки: ${crossNote}${routeList}. Ближайших прибытий на этой остановке по этим маршрутам сейчас нет.`
+        : responseLocale === "en"
+          ? `To "${destLabel}" without transfer: ${crossNote}${routeList}. No upcoming arrivals for these routes at this stop.`
+          : `«${destLabel}» бағытына ауысусыз: ${crossNote}${routeList}. Жақын келулер жоқ.`
+    }
+
+    if (bestDirect?.kind === "opposite" && !preferItineraryResponse) {
+      const routeNums = bestDirect.routeNums
+      const oppositeArrival =
+        await getNextUpcomingAtOppositeStopForRoutes(routeNums)
+      const routeList = [...routeNums]
+        .map((n) => formatRouteLabel(responseLocale, n))
+        .join(", ")
+      if (oppositeArrival) {
+        return responseLocale === "ru"
+          ? `До «${destLabel}» — обратное направление. Перейдите на встречную остановку, сядьте на ${formatRouteLabel(responseLocale, oppositeArrival.route_number)}. Ближайший автобус через ${formatMinutes(responseLocale, oppositeArrival.eta_minutes)}.`
+          : responseLocale === "en"
+            ? `To "${destLabel}" — opposite direction. Cross to the opposite stop and take ${formatRouteLabel(responseLocale, oppositeArrival.route_number)}. Next bus in ${formatMinutes(responseLocale, oppositeArrival.eta_minutes)}.`
+            : `«${destLabel}» қарсы бағыт. Қарсы аялдамаға өтіп, ${formatRouteLabel(responseLocale, oppositeArrival.route_number)}. ${formatMinutes(responseLocale, oppositeArrival.eta_minutes)} кейін.`
+      }
+      return responseLocale === "ru"
+        ? `До «${destLabel}» — обратное направление (${routeList}). Перейдите на встречную остановку.`
+        : responseLocale === "en"
+          ? `To "${destLabel}" use the opposite direction (${routeList}). Cross to the opposite stop.`
+          : `«${destLabel}» қарсы бағыт (${routeList}). Қарсы аялдамаға өтіңіз.`
+    }
+
+    if (!path?.length) {
+      return responseLocale === "ru"
+        ? `Маршрут до «${destLabel}» на автобусах 10/12/46 с ≤${maxBusLegs} поездками не найден.`
+        : responseLocale === "en"
+          ? `No itinerary to "${destLabel}" on routes 10/12/46 within ${maxBusLegs} rides.`
+          : `«${destLabel}» бағытына ${maxBusLegs} сапар шегінде маршрут табылмады.`
+    }
+
+    const byId = new Map(stopsForContext.map((s) => [s.id, s as StopContextRow]))
+    const resolveName = (id: string) => {
+      const row = byId.get(id)
+      return row ? stopDisplayName(row, responseLocale) : id
+    }
+
+    const lines = path.map((leg, i) => {
+      const fromL = resolveName(leg.fromStopId)
+      const toL = resolveName(leg.toStopId)
+      const transfer =
+        i > 0
+          ? responseLocale === "ru"
+            ? " (пересадка)"
+            : responseLocale === "en"
+              ? " (transfer)"
+              : " (ауысу)"
+          : ""
+      if (leg.routeNumber === WALK_TRANSFER_ROUTE_NUMBER) {
+        return responseLocale === "ru"
+          ? `${i + 1}. Перейдите к остановке «${toL}» (встречная сторона, ~2 мин пешком).`
+          : responseLocale === "en"
+            ? `${i + 1}. Walk to "${toL}" (opposite platform, ~2 min).`
+            : `${i + 1}. «${toL}» аялдамасына жүру (қарсы жақ, ~2 мин).`
+      }
+      return `${i + 1}. ${formatRouteLabel(responseLocale, leg.routeNumber)}${transfer}: ${fromL} → ${toL}`
+    })
+
+    const firstBusLeg = path.find(
+      (leg) => leg.routeNumber !== WALK_TRANSFER_ROUTE_NUMBER
+    )
+    const firstRouteNums = new Set(
+      firstBusLeg ? [firstBusLeg.routeNumber] : [path[0].routeNumber]
+    )
+    const firstEtaRaw = itinerary?.crossPlatform
+      ? await getNextUpcomingAtOppositeStopForRoutes(firstRouteNums)
+      : getNextUpcomingForRouteNumbers(firstRouteNums)
+    const firstEtaRoute =
+      firstEtaRaw &&
+      ("route" in firstEtaRaw ? firstEtaRaw.route : firstEtaRaw.route_number)
+    const firstEtaMinutes =
+      firstEtaRaw &&
+      ("minutesAway" in firstEtaRaw
+        ? firstEtaRaw.minutesAway
+        : firstEtaRaw.eta_minutes)
+    const etaLine =
+      firstEtaRoute != null && firstEtaMinutes != null
+        ? responseLocale === "ru"
+          ? ` Сейчас ${itinerary?.crossPlatform ? "на встречной остановке" : "с этой остановки"} ${formatRouteLabel(responseLocale, firstEtaRoute)} через ~${formatMinutes(responseLocale, firstEtaMinutes)}.`
+          : responseLocale === "en"
+            ? ` From ${itinerary?.crossPlatform ? "the opposite stop" : "this stop"} ${formatRouteLabel(responseLocale, firstEtaRoute)} in ~${formatMinutes(responseLocale, firstEtaMinutes)}.`
+            : ` ${itinerary?.crossPlatform ? "Қарсы аялдамада" : "Бұл аялдамадан"} ${formatRouteLabel(responseLocale, firstEtaRoute)} ~${formatMinutes(responseLocale, firstEtaMinutes)} кейін.`
+        : ""
+
+    const crossPrefix = itinerary?.crossPlatform
+      ? responseLocale === "ru"
+        ? "Перейдите на встречную остановку. "
+        : responseLocale === "en"
+          ? "Cross to the opposite stop. "
+          : "Қарсы аялдамаға өтіңіз. "
+      : ""
+
+    const header =
+      path.length === 1
+        ? responseLocale === "ru"
+          ? `${crossPrefix}До «${destLabel}» (без пересадки):`
+          : responseLocale === "en"
+            ? `${crossPrefix}To "${destLabel}" (direct):`
+            : `${crossPrefix}«${destLabel}» (ауысусыз):`
+        : responseLocale === "ru"
+          ? `${crossPrefix}До «${destLabel}» с пересадками (автобусы 10, 12, 46):`
+          : responseLocale === "en"
+            ? `${crossPrefix}To "${destLabel}" with transfers (buses 10, 12, 46):`
+            : `${crossPrefix}«${destLabel}» (10, 12, 46, ауысу):`
+
+    return `${header}\n${lines.join("\n")}${etaLine}`
+  }
+
   // Rule-based fallback function for when AI is unavailable
   const generateFallbackAnswer = async (): Promise<string> => {
+    const routeDestQuery = extractDestinationStopQueryFromQuestion(question)
+    if (routeDestQuery && stopId && currentStop) {
+      return runRouteToBusStop(routeDestQuery)
+    }
+
     const tx = {
       nextBus:
         responseLocale === "ru"
@@ -1113,11 +1329,33 @@ For multi-stop itineraries only: you may answer with a compact numbered list (ea
     }`
   }
 
+  const routeDestQuery = extractDestinationStopQueryFromQuestion(question)
+  if (routeDestQuery && stopId && currentStop) {
+    const answer = await runRouteToBusStop(routeDestQuery)
+    const responseTime = Date.now() - startTime
+    await supabase.from("ai_query_logs").insert({
+      stop_id: stopId || null,
+      question,
+      answer,
+      intent: "route_query",
+      confidence: 0.95,
+      response_time_ms: responseTime,
+      was_successful: true,
+    })
+    return Response.json({
+      answer,
+      intent: "route_query",
+      responseTime,
+      routed: true,
+    })
+  }
+
   try {
     const result = await generateText({
       model: "openai/gpt-4o-mini",
       system: systemPrompt,
       prompt: question,
+      maxSteps: 8,
       tools: {
         getNextArrival: tool({
           description: "Get the next bus arrival at the current stop",
@@ -1197,7 +1435,12 @@ For multi-stop itineraries only: you may answer with a compact numbered list (ea
           }),
           execute: async ({ query, limit }) => {
             const lim = limit ?? 8
-            const hits = searchStopsLocal(query, stopsForContext as StopContextRow[], lim)
+            const cleaned = normalizeDestinationStopQuery(query) || query
+            const hits = searchStopsForRouting(
+              cleaned,
+              stopsForContext as StopRoutingRow[],
+              lim
+            )
             if (!hits.length) {
               return responseLocale === "ru"
                 ? "Остановки не найдены."
@@ -1524,7 +1767,22 @@ For multi-stop itineraries only: you may answer with a compact numbered list (ea
             }
             const mt = maxTransfers ?? 3
             const maxLegs = mt + 1
-            const path = planFewestRides(from.id, to.id, rideAdjacency, maxLegs)
+            const fromRouting = resolveStopIdForRouting(
+              from,
+              stopsForContext as StopRoutingRow[],
+              mvpRoutingContext
+            )
+            const toRouting = resolveStopIdForRouting(
+              to,
+              stopsForContext as StopRoutingRow[],
+              mvpRoutingContext
+            )
+            const path = planFewestRides(
+              fromRouting,
+              toRouting,
+              mvpRoutingContext.adjacency,
+              maxLegs
+            )
             if (!path) {
               return responseLocale === "ru"
                 ? `Маршрут не найден за ≤${maxLegs} поездок (попробуйте другие остановки или увеличьте maxTransfers).`
@@ -1552,6 +1810,18 @@ For multi-stop itineraries only: you may answer with a compact numbered list (ea
               })
               .join("\n")
           },
+        }),
+        getRouteToBusStop: tool({
+          description:
+            "How to reach any bus stop in the database from the current kiosk stop. Uses routes 10, 12, 46 with direct rides or transfers. Primary tool for 'how to get to stop X' / 'как доехать до остановки …' (e.g. Звезда Астаны, Stella Zvezda).",
+          inputSchema: z.object({
+            destinationStopQuery: z
+              .string()
+              .describe("Destination stop name or phrase from the passenger question"),
+            maxTransfers: z.number().int().min(0).max(4).optional(),
+          }),
+          execute: async ({ destinationStopQuery, maxTransfers }) =>
+            runRouteToBusStop(destinationStopQuery, maxTransfers ?? 3),
         }),
         getEtaForStop: tool({
           description:
@@ -1830,7 +2100,9 @@ For multi-stop itineraries only: you may answer with a compact numbered list (ea
       questionLower.includes("get to") ||
       questionLower.includes("go to") ||
       questionLower.includes("как доехать") ||
-      questionLower.includes("доехать")
+      questionLower.includes("доехать") ||
+      questionLower.includes("добраться") ||
+      questionLower.includes("попасть")
     ) {
       intent = "route_query"
     } else if (questionLower.includes("schedule") || questionLower.includes("time") || questionLower.includes("last")) {
@@ -1884,7 +2156,9 @@ For multi-stop itineraries only: you may answer with a compact numbered list (ea
       questionLower.includes("get to") ||
       questionLower.includes("go to") ||
       questionLower.includes("как доехать") ||
-      questionLower.includes("доехать")
+      questionLower.includes("доехать") ||
+      questionLower.includes("добраться") ||
+      questionLower.includes("попасть")
     ) {
       intent = "route_query"
     } else if (questionLower.includes("schedule") || questionLower.includes("time") || questionLower.includes("last")) {

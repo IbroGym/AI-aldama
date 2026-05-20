@@ -343,6 +343,8 @@ export const ROUTE_46_INBOUND_STOP_IDS: string[] = [
   "5391b527-9aca-4609-bfff-f4bc06028e92",
   "27d8a517-89c8-461a-978c-4d130be266ca",
   "78b8c8b2-0656-44ce-ab21-d10e44c42117",
+  "944c30c5-9c8b-4b83-9b15-d3c9f8ad0267",
+  "6e0f2eb6-c144-4f73-8628-20f062f8f9b4",
 ]
 
 /** Normalized key for matching override `stop_code` to loaded rows. */
