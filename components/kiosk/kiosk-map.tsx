@@ -85,8 +85,15 @@ export function KioskMap({
         if (!res.ok || cancelled) return
         const data = (await res.json()) as { vehicles: MiniVehicle[] }
         if (!cancelled) {
-          const list = data.vehicles ?? []
-          // Show all buses on routes serving this stop (same as expanded map), not only those with ETA.
+          const allowed = new Set(
+            relevantRouteNumbers.length
+              ? relevantRouteNumbers
+              : ["10", "12", "46"],
+          )
+          const list = (data.vehicles ?? []).filter((v) =>
+            allowed.has(v.route_number),
+          )
+          // Show all buses on kiosk-relevant routes (same as expanded map), not only those with ETA.
           const sorted = [...list].sort((a, b) => {
             const ae = a.eta_minutes
             const be = b.eta_minutes
@@ -107,7 +114,7 @@ export function KioskMap({
       cancelled = true
       clearInterval(interval)
     }
-  }, [stopId, stop?.stop_code, isDev])
+  }, [stopId, stop?.stop_code, isDev, relevantRouteNumbers])
 
   const center = useMemo<[number, number]>(
     () => [stop?.latitude ?? 51.1694, stop?.longitude ?? 71.4491],

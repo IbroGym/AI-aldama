@@ -955,11 +955,6 @@ For multi-stop itineraries only: you may answer with a compact numbered list (ea
 
   // Rule-based fallback function for when AI is unavailable
   const generateFallbackAnswer = async (): Promise<string> => {
-    const routeDestQuery = extractDestinationStopQueryFromQuestion(question)
-    if (routeDestQuery && stopId && currentStop) {
-      return runRouteToBusStop(routeDestQuery)
-    }
-
     const tx = {
       nextBus:
         responseLocale === "ru"
@@ -995,6 +990,7 @@ For multi-stop itineraries only: you may answer with a compact numbered list (ea
       ? CANONICAL_DESTINATIONS[destinationKey].id
       : null
     const routeNumber = extractRouteNumber(question)
+    const routeDestQuery = extractDestinationStopQueryFromQuestion(question)
 
     if (destinationKey && destinationId && stopId) {
       // NU has two platforms on route 10; DB route_stops can look "direct" while the correct
@@ -1202,6 +1198,10 @@ For multi-stop itineraries only: you may answer with a compact numbered list (ea
           : `Осы аялдамадан ${destinationLabel} бағытына ${routeList} автобусына отырыңыз, бірақ жақын келулер қазір жоқ.`
     }
 
+    if (routeDestQuery && stopId && currentStop) {
+      return runRouteToBusStop(routeDestQuery)
+    }
+
     // Next arrival queries (EN + RU + KK keywords; KK must come before broad "автобус" route branch below)
     if (
       questionLower.includes("next") ||
@@ -1327,6 +1327,27 @@ For multi-stop itineraries only: you may answer with a compact numbered list (ea
         ? `${formatRouteLabel(responseLocale, upcomingArrivals[0].route)} ${tx.arrivingIn} ${formatMinutes(responseLocale, upcomingArrivals[0].minutesAway)}`
         : tx.insufficient
     }`
+  }
+
+  const canonicalDestinationKey = getDestinationKey(question)
+  if (canonicalDestinationKey && stopId) {
+    const answer = await generateFallbackAnswer()
+    const responseTime = Date.now() - startTime
+    await supabase.from("ai_query_logs").insert({
+      stop_id: stopId || null,
+      question,
+      answer,
+      intent: "route_query",
+      confidence: 0.97,
+      response_time_ms: responseTime,
+      was_successful: true,
+    })
+    return Response.json({
+      answer,
+      intent: "route_query",
+      responseTime,
+      routed: true,
+    })
   }
 
   const routeDestQuery = extractDestinationStopQueryFromQuestion(question)

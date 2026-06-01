@@ -535,7 +535,7 @@ export function isRouteToStopQuestion(question: string): boolean {
   if (!asksRoute) return false
 
   const canonicalOnly =
-    /\b(аэропорт|airport|әуежай|вокзал|теміржол|темиржол|railway|train station)\b/i.test(
+    /(?:аэропорт[а-яё]*|airport|әуежай[а-яёәғқңөүұһі]*|вокзал[а-яё]*|теміржол|темиржол|railway|train station|единоборств|ушкемп|ushkemp)/iu.test(
       lower
     ) &&
     !/звезд|zvezda|stella|стелл|стелла|жұлдыз|juldyz|қарасу|karasu/i.test(lower)

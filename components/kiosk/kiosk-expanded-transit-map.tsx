@@ -9,6 +9,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import type { BusStop } from "@/lib/types/database"
+import { routesServingStop } from "@/lib/vehicles/engine"
 import type { MapRouteDTO, TransitContextDTO, VehicleDTO } from "@/lib/vehicles/types"
 import { cn } from "@/lib/utils"
 import {
@@ -52,29 +53,33 @@ const STOP_ONLY_PAD_DEG = 0.004
 /** Extra margin around focused content for maxBounds (pan limit), as fraction of span. */
 const PAN_LIMIT_MARGIN_RATIO = 0.38
 const PAN_LIMIT_MIN_MARGIN_DEG = 0.012
-const PAN_LIMIT_MAX_MARGIN_LAT = 0.055
-const PAN_LIMIT_MAX_MARGIN_LNG = 0.07
+/** Wider pan margin when full route corridors are shown (kiosk map). */
+const PAN_LIMIT_MAX_MARGIN_LAT = 0.12
+const PAN_LIMIT_MAX_MARGIN_LNG = 0.15
 
+/**
+ * Routes to draw on the kiosk map. Prefer every `relevantRouteNumbers` route
+ * (e.g. 12 + 46 at Teatr Astana Opera) so geometry is not dropped when only one
+ * direction’s stop list contains this `stopId` in `stop_ids_ordered`.
+ */
 function servingRoutesForStop(
   transit: TransitContextDTO | null,
   stopId: string,
   relevantRouteNumbers: string[],
-  etas: KioskExpandedEtaRow[],
 ): MapRouteDTO[] {
   if (!transit?.routes.length) return []
   const rel = new Set(relevantRouteNumbers)
-  const byStop = transit.routes.filter(
-    (r) => rel.has(r.route_number) && r.stop_ids_ordered.includes(stopId),
+
+  if (rel.size > 0) {
+    const byKiosk = transit.routes.filter((r) => rel.has(r.route_number))
+    if (byKiosk.length > 0) return byKiosk
+  }
+
+  return routesServingStop(
+    transit.routes,
+    stopId,
+    transit.route_direction_debug,
   )
-  if (byStop.length) return byStop
-  const fromArrivals = new Set(
-    etas
-      .map((e) => e.route?.route_number)
-      .filter((x): x is string => !!x),
-  )
-  const byEta = transit.routes.filter((r) => fromArrivals.has(r.route_number))
-  if (byEta.length) return byEta
-  return transit.routes.filter((r) => rel.has(r.route_number))
 }
 
 function extendBoundsWithCoords(
@@ -292,25 +297,9 @@ export function KioskExpandedTransitMap({
     }
   }, [open, stopId])
 
-  /** Avoid recomputing serving routes on every `etas` reference change (parent re-renders). */
-  const etaRouteSignature = useMemo(
-    () =>
-      [
-        ...new Set(
-          etas
-            .map((e) => e.route?.route_number)
-            .filter((x): x is string => !!x),
-        ),
-      ]
-        .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
-        .join("|"),
-    [etas],
-  )
-
   const servingRoutes = useMemo(
-    () => servingRoutesForStop(transit, stopId, relevantRouteNumbers, etas),
-    // etas read here; etaRouteSignature gates recomputation so parent ETA list churn does not refit the map.
-    [transit, stopId, relevantRouteNumbers, etaRouteSignature],
+    () => servingRoutesForStop(transit, stopId, relevantRouteNumbers),
+    [transit, stopId, relevantRouteNumbers],
   )
 
   const chipRouteNumbers = useMemo(() => {
@@ -330,14 +319,19 @@ export function KioskExpandedTransitMap({
     return servingRoutes.filter((r) => r.route_number === routeFilter)
   }, [servingRoutes, routeFilter])
 
+  const mapRouteNumbers = useMemo(() => {
+    const nums = new Set(relevantRouteNumbers)
+    servingRoutes.forEach((r) => nums.add(r.route_number))
+    return nums
+  }, [relevantRouteNumbers, servingRoutes])
+
   const visibleVehicles = useMemo(() => {
-    const routeNums = new Set(visibleRoutes.map((r) => r.route_number))
-    let list = vehicles.filter((v) => routeNums.has(v.route_number))
+    let list = vehicles.filter((v) => mapRouteNumbers.has(v.route_number))
     if (routeFilter !== "all") {
       list = list.filter((v) => v.route_number === routeFilter)
     }
     return list
-  }, [vehicles, visibleRoutes, routeFilter])
+  }, [vehicles, mapRouteNumbers, routeFilter])
 
   const [fitKey, setFitKey] = useState(0)
   useEffect(() => {
@@ -359,8 +353,9 @@ export function KioskExpandedTransitMap({
   }, [open, servingRoutes.length])
 
   const corridorBounds = useMemo(
-    () => computeFocusedLatLngBounds(stopCenter, visibleRoutes, []),
-    [stopCenter, visibleRoutes],
+    () =>
+      computeFocusedLatLngBounds(stopCenter, visibleRoutes, visibleVehicles),
+    [stopCenter, visibleRoutes, visibleVehicles],
   )
 
   const panLimitBounds = useMemo(
